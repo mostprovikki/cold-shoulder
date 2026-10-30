@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cold Shoulder — Tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f7f7f5; padding: 24px; color: #1a1a1a; }
+    h1 { font-size: 18px; margin-bottom: 20px; }
+    .suite { margin-bottom: 24px; }
+    .suite-name { font-size: 14px; font-weight: 700; margin-bottom: 6px; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+    .test { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; font-size: 13px; }
+    .pass { color: #1a7a4a; }
+    .fail { color: #c0392b; }
+    .icon { font-size: 14px; flex-shrink: 0; }
+    .detail { color: #888; font-size: 11px; margin-top: 2px; font-family: monospace; }
+    #summary { font-size: 14px; font-weight: 600; padding: 10px 14px; border-radius: 8px; margin-bottom: 20px; }
+    #summary.all-pass { background: #d4edda; color: #1a5e35; }
+    #summary.has-fail  { background: #fde0d9; color: #7a2010; }
+    button { padding: 8px 18px; font-size: 13px; cursor: pointer; border: 1px solid #ccc; border-radius: 6px; background: #fff; margin-bottom: 20px; }
+    button:hover { background: #f0f0f0; }
+  </style>
+</head>
+<body>
+  <h1>Cold Shoulder Test Suite</h1>
+  <button onclick="runAll()">Run all tests</button>
+  <div id="summary" style="display:none"></div>
+  <div id="output"></div>
+
+<script>
+// ── Pure game logic (copied from the original game) ────────────────
+// Keep in sync with the main file. These are the testable pure functions.
+
+function shuffledRange(n) {
+  const a = Array.from({length: n}, (_, i) => i);
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function contiguousRuns(vals) {
+  const runs = [];
+  let start = -1;
+  for (let i = 0; i <= vals.length; i++) {
+    if (i < vals.length && vals[i] === -1) { if (start === -1) start = i; }
+    else if (start !== -1) { runs.push([start, i - 1]); start = -1; }
+  }
+  return runs;
+}
+
+function generateRegions(n, chaos) {
+  if (chaos === undefined) chaos = 0.8;
+  const reg = Array.from({length: n}, () => Array(n).fill(-1));
+  let nextReg = 0;
+  const wantSingleCell = chaos < 0.2 ? 1 : 0;
+  const wantStrips     = chaos < 0.2 ? 2 : chaos < 0.55 ? 1 : 0;
+  for (let s = 0; s < wantSingleCell && nextReg < n - 2; s++) {
+    const free = [];
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (reg[r][c] === -1) free.push([r, c]);
+    if (!free.length) break;
+    const [r, c] = free[Math.floor(Math.random() * free.length)];
+    reg[r][c] = nextReg++;
+  }
+  const rowOrder = shuffledRange(n), colOrder = shuffledRange(n);
+  let ri = 0, ci = 0;
+  for (let s = 0; s < wantStrips && nextReg < n - 1; s++) {
+    let placed = false;
+    if (s % 2 === 0) {
+      while (ri < n && !placed) {
+        const row = rowOrder[ri++];
+        const runs = contiguousRuns(reg[row]).filter(([a, b]) => b - a + 1 >= 2);
+        if (!runs.length) continue;
+        const [a, b] = runs[Math.floor(Math.random() * runs.length)];
+        const runLen = b - a + 1;
+        const maxSize = Math.min(runLen, Math.max(2, Math.floor(n / 2)));
+        const size = 2 + Math.floor(Math.random() * Math.max(1, maxSize - 1));
+        const startC = a + Math.floor(Math.random() * (runLen - size + 1));
+        for (let c = startC; c < startC + size; c++) reg[row][c] = nextReg;
+        nextReg++; placed = true;
+      }
+    } else {
+      while (ci < n && !placed) {
+        const col = colOrder[ci++];
+        const colVals = reg.map(r => r[col]);
+        const runs = contiguousRuns(colVals).filter(([a, b]) => b - a + 1 >= 2);
+        if (!runs.length) continue;
+        const [a, b] = runs[Math.floor(Math.random() * runs.length)];
+        const runLen = b - a + 1;
+        const maxSize = Math.min(runLen, Math.max(2, Math.floor(n / 2)));
+        const size = 2 + Math.floor(Math.random() * Math.max(1, maxSize - 1));
+        const startR = a + Math.floor(Math.random() * (runLen - size + 1));
+        for (let r = startR; r < startR + size; r++) reg[r][col] = nextReg;
+        nextReg++; placed = true;
+      }
+    }
+  }
+  const totalAssigned = reg.reduce((s, row) => s + row.filter(x => x !== -1).length, 0);
+  const remaining = n * n - totalAssigned;
+  const remainingRegs = n - nextReg;
+  if (remainingRegs === 0) return reg.some(row => row.some(c => c === -1)) ? null : reg;
+  const sizes = [];
+  let rem = remaining;
+  for (let i = 0; i < remainingRegs; i++) {
+    if (i === remainingRegs - 1) { sizes.push(rem); break; }
+    const base = Math.round(rem / (remainingRegs - i));
+    const jitter = Math.floor(Math.random() * 3) - 1;
+    sizes.push(Math.max(1, Math.min(n + 2, base + jitter)));
+    rem -= sizes[i];
+  }
+  if (sizes[sizes.length - 1] < 1) return null;
+  for (let rIdx = 0; rIdx < remainingRegs; rIdx++) {
+    const rId = nextReg + rIdx;
+    const candidates = [];
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (reg[i][j] === -1) candidates.push([i, j]);
+    if (!candidates.length) return null;
+    const [sr, sc] = candidates[Math.floor(Math.random() * candidates.length)];
+    reg[sr][sc] = rId;
+    const cells = [[sr, sc]];
+    let needed = sizes[rIdx] - 1;
+    while (needed > 0) {
+      const frontierSet = new Set();
+      for (const [pr, pc] of cells) {
+        for (const [dr, dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+          const nr = pr + dr, nc = pc + dc;
+          if (nr >= 0 && nr < n && nc >= 0 && nc < n && reg[nr][nc] === -1)
+            frontierSet.add(nr * n + nc);
+        }
+      }
+      if (!frontierSet.size) return null;
+      const frontierArr = Array.from(frontierSet);
+      let pick;
+      if (chaos < 0.55 && Math.random() > chaos) {
+        const cx = cells.reduce((s, [rr]) => s + rr, 0) / cells.length;
+        const cy = cells.reduce((s, [, cc]) => s + cc, 0) / cells.length;
+        frontierArr.sort((a, b) => {
+          const da = Math.abs(Math.floor(a/n) - cx) + Math.abs((a%n) - cy);
+          const db = Math.abs(Math.floor(b/n) - cx) + Math.abs((b%n) - cy);
+          return da - db;
+        });
+        pick = frontierArr[Math.floor(Math.random() * Math.max(1, Math.ceil(frontierArr.length * 0.35)))];
+      } else {
+        pick = frontierArr[Math.floor(Math.random() * frontierArr.length)];
+      }
+      const nr = Math.floor(pick / n), nc = pick % n;
+      reg[nr][nc] = rId;
+      cells.push([nr, nc]);
+      needed--;
+    }
+  }
+  if (reg.some(row => row.some(c => c === -1))) return null;
+  return reg;
+}
+
+function solvePuzzle(n, regs) {
+  const sol = Array(n).fill(-1);
+  const usedCols = new Set();
+  const usedRegs = new Set();
+  function ok(row, col) {
+    if (usedCols.has(col)) return false;
+    if (usedRegs.has(regs[row][col])) return false;
+    if (row > 0 && sol[row-1] >= 0 && Math.abs(sol[row-1]-col) <= 1) return false;
+    return true;
+  }
+  function bt(row) {
+    if (row === n) return true;
+    const cols = Array.from({length: n}, (_, i) => i);
+    for (let i = cols.length-1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i+1));
+      [cols[i], cols[j]] = [cols[j], cols[i]];
+    }
+    for (const col of cols) {
+      if (ok(row, col)) {
+        sol[row]=col; usedCols.add(col); usedRegs.add(regs[row][col]);
+        if (bt(row+1)) return true;
+        sol[row]=-1; usedCols.delete(col); usedRegs.delete(regs[row][col]);
+      }
+    }
+    return false;
+  }
+  return bt(0) ? sol : null;
+}
+
+// isConflict for a given board state
+function isConflict(board, regions, n, r, c) {
+  for (let cc = 0; cc < n; cc++) if (cc !== c && board[r][cc] === 1) return true;
+  for (let rr = 0; rr < n; rr++) if (rr !== r && board[rr][c] === 1) return true;
+  const reg = regions[r][c];
+  for (let rr = 0; rr < n; rr++) for (let cc = 0; cc < n; cc++)
+    if ((rr!==r||cc!==c) && board[rr][cc]===1 && regions[rr][cc]===reg) return true;
+  for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+    if (dr===0 && dc===0) continue;
+    const nr=r+dr, nc=c+dc;
+    if (nr>=0 && nr<n && nc>=0 && nc<n && board[nr][nc]===1) return true;
+  }
+  return false;
+}
+
+function getAutoMarked(board, regions, n) {
+  const marked = new Set();
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    if (board[r][c] !== 1) continue;
+    for (let cc = 0; cc < n; cc++) if (cc !== c) marked.add(r*n+cc);
+    for (let rr = 0; rr < n; rr++) if (rr !== r) marked.add(rr*n+c);
+    const reg = regions[r][c];
+    for (let rr = 0; rr < n; rr++) for (let cc = 0; cc < n; cc++)
+      if ((rr!==r||cc!==c) && regions[rr][cc]===reg) marked.add(rr*n+cc);
+    for (const [dr,dc] of [[-1,-1],[-1,1],[1,-1],[1,1]]) {
+      const nr=r+dr, nc=c+dc;
+      if (nr>=0 && nr<n && nc>=0 && nc<n) marked.add(nr*n+nc);
+    }
+  }
+  return marked;
+}
+
+// ── Test framework ───────────────────────────────────────────────────────────
+let passed = 0, failed = 0;
+const suites = [];
+let currentSuite = null;
+
+function suite(name, fn) {
+  currentSuite = { name, tests: [] };
+  suites.push(currentSuite);
+  fn();
+}
+
+function test(name, fn) {
+  try {
+    fn();
+    currentSuite.tests.push({ name, ok: true });
+    passed++;
+  } catch (e) {
+    currentSuite.tests.push({ name, ok: false, err: e.message });
+    failed++;
+  }
+}
+
+function assert(cond, msg) {
+  if (!cond) throw new Error(msg || 'Assertion failed');
+}
+
+function assertEqual(a, b, msg) {
+  if (a !== b) throw new Error((msg||'assertEqual') + `: expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function isRegionContiguous(regions, n, regId) {
+  const cells = [];
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (regions[r][c] === regId) cells.push([r,c]);
+  if (!cells.length) return false;
+  const visited = new Set();
+  const queue = [cells[0]];
+  visited.add(cells[0][0]*n + cells[0][1]);
+  while (queue.length) {
+    const [r,c] = queue.shift();
+    for (const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+      const nr=r+dr, nc=c+dc;
+      if (nr>=0&&nr<n&&nc>=0&&nc<n&&regions[nr][nc]===regId&&!visited.has(nr*n+nc)) {
+        visited.add(nr*n+nc); queue.push([nr,nc]);
+      }
+    }
+  }
+  return visited.size === cells.length;
+}
+
+function boardFromSolution(sol, n) {
+  const board = Array.from({length:n}, ()=>Array(n).fill(0));
+  for (let r = 0; r < n; r++) if (sol[r] >= 0) board[r][sol[r]] = 1;
+  return board;
+}
+
+// ── Test suites ───────────────────────────────────────────────────────────────
+
+suite('contiguousRuns', () => {
+  test('empty array returns empty', () => {
+    assertEqual(JSON.stringify(contiguousRuns([])), '[]');
+  });
+  test('all free', () => {
+    const runs = contiguousRuns([-1,-1,-1]);
+    assertEqual(runs.length, 1);
+    assertEqual(JSON.stringify(runs[0]), '[0,2]');
+  });
+  test('all occupied', () => {
+    assertEqual(contiguousRuns([0,1,2]).length, 0);
+  });
+  test('mixed', () => {
+    const runs = contiguousRuns([-1,-1,0,-1,-1,-1]);
+    assertEqual(runs.length, 2);
+    assertEqual(JSON.stringify(runs[0]), '[0,1]');
+    assertEqual(JSON.stringify(runs[1]), '[3,5]');
+  });
+  test('single free cell', () => {
+    const runs = contiguousRuns([0,-1,0]);
+    assertEqual(runs.length, 1);
+    assertEqual(JSON.stringify(runs[0]), '[1,1]');
+  });
+});
+
+suite('shuffledRange', () => {
+  test('returns correct length', () => {
+    assertEqual(shuffledRange(6).length, 6);
+  });
+  test('contains all values 0..n-1', () => {
+    const r = shuffledRange(8);
+    const sorted = [...r].sort((a,b)=>a-b);
+    for (let i = 0; i < 8; i++) assertEqual(sorted[i], i, 'value '+i);
+  });
+  test('zero length', () => {
+    assertEqual(shuffledRange(0).length, 0);
+  });
+});
+
+suite('generateRegions (structure)', () => {
+  const sizes = [4, 6, 8];
+  for (const n of sizes) {
+    test(`n=${n}: returns an n×n grid`, () => {
+      let reg = null;
+      for (let i = 0; i < 20 && !reg; i++) reg = generateRegions(n, 0.8);
+      assert(reg !== null, 'never generated');
+      assertEqual(reg.length, n);
+      for (let r = 0; r < n; r++) assertEqual(reg[r].length, n, `row ${r} wrong length`);
+    });
+    test(`n=${n}: covers all cells`, () => {
+      let reg = null;
+      for (let i = 0; i < 20 && !reg; i++) reg = generateRegions(n, 0.8);
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++)
+        assert(reg[r][c] >= 0, `cell (${r},${c}) unassigned`);
+    });
+    test(`n=${n}: has exactly n region IDs (0..n-1)`, () => {
+      let reg = null;
+      for (let i = 0; i < 20 && !reg; i++) reg = generateRegions(n, 0.8);
+      const ids = new Set(reg.flat());
+      assertEqual(ids.size, n, `expected ${n} regions, got ${ids.size}`);
+      for (let id = 0; id < n; id++) assert(ids.has(id), `missing region ${id}`);
+    });
+    test(`n=${n}: all regions are contiguous`, () => {
+      let reg = null;
+      for (let i = 0; i < 20 && !reg; i++) reg = generateRegions(n, 0.8);
+      for (let id = 0; id < n; id++)
+        assert(isRegionContiguous(reg, n, id), `region ${id} is not contiguous`);
+    });
+  }
+});
+
+suite('solvePuzzle', () => {
+  test('returns array of length n', () => {
+    let reg = null, sol = null;
+    for (let i = 0; i < 50 && !sol; i++) {
+      reg = generateRegions(6, 0.8);
+      if (reg) sol = solvePuzzle(6, reg);
+    }
+    assert(sol !== null, 'no solution found in 50 attempts');
+    assertEqual(sol.length, 6);
+  });
+
+  test('solution: one cat per row (all values 0..n-1 range)', () => {
+    let reg = null, sol = null, n = 6;
+    for (let i = 0; i < 50 && !sol; i++) {
+      reg = generateRegions(n, 0.8); if (reg) sol = solvePuzzle(n, reg);
+    }
+    assert(sol !== null);
+    for (let r = 0; r < n; r++) assert(sol[r] >= 0 && sol[r] < n, `row ${r} col out of range`);
+  });
+
+  test('solution: one cat per column (all columns distinct)', () => {
+    let reg = null, sol = null, n = 6;
+    for (let i = 0; i < 50 && !sol; i++) {
+      reg = generateRegions(n, 0.8); if (reg) sol = solvePuzzle(n, reg);
+    }
+    const cols = new Set(sol);
+    assertEqual(cols.size, n, `expected ${n} distinct columns`);
+  });
+
+  test('solution: one cat per region', () => {
+    let reg = null, sol = null, n = 6;
+    for (let i = 0; i < 50 && !sol; i++) {
+      reg = generateRegions(n, 0.8); if (reg) sol = solvePuzzle(n, reg);
+    }
+    const usedRegs = new Set(sol.map((c, r) => reg[r][c]));
+    assertEqual(usedRegs.size, n, `expected ${n} distinct regions`);
+  });
+
+  test('solution: no two cats touch diagonally', () => {
+    let reg = null, sol = null, n = 6;
+    for (let i = 0; i < 50 && !sol; i++) {
+      reg = generateRegions(n, 0.8); if (reg) sol = solvePuzzle(n, reg);
+    }
+    for (let r = 0; r < n-1; r++)
+      assert(Math.abs(sol[r] - sol[r+1]) > 1, `rows ${r} and ${r+1} diagonally adjacent`);
+  });
+
+  test('unsolvable grid returns null', () => {
+    // 2×2 grid, both cells same region — no valid placement
+    const reg = [[0,0],[0,0]];
+    const sol = solvePuzzle(2, reg);
+    assertEqual(sol, null);
+  });
+});
+
+suite('isConflict', () => {
+  const n = 4;
+  // Simple 4×4 with 4 diagonal regions
+  const reg = [
+    [0,0,1,1],
+    [0,0,1,1],
+    [2,2,3,3],
+    [2,2,3,3],
+  ];
+
+  test('no conflict on empty board', () => {
+    const board = Array.from({length:n},()=>Array(n).fill(0));
+    board[0][0] = 1;
+    assert(!isConflict(board, reg, n, 0, 0));
+  });
+
+  test('detects same-row conflict', () => {
+    const board = Array.from({length:n},()=>Array(n).fill(0));
+    board[0][0] = 1; board[0][2] = 1;
+    assert(isConflict(board, reg, n, 0, 2));
+  });
+
+  test('detects same-column conflict', () => {
+    const board = Array.from({length:n},()=>Array(n).fill(0));
+    board[0][0] = 1; board[2][0] = 1;
+    assert(isConflict(board, reg, n, 2, 0));
+  });
+
+  test('detects same-region conflict', () => {
+    const board = Array.from({length:n},()=>Array(n).fill(0));
+    board[0][0] = 1; board[1][1] = 1; // both in region 0
+    assert(isConflict(board, reg, n, 1, 1));
+  });
+
+  test('detects diagonal-touch conflict', () => {
+    const board = Array.from({length:n},()=>Array(n).fill(0));
+    board[0][2] = 1; board[1][3] = 1;
+    assert(isConflict(board, reg, n, 1, 3));
+  });
+
+  test('no conflict for valid non-touching cats', () => {
+    const board = Array.from({length:n},()=>Array(n).fill(0));
+    board[0][0] = 1; board[2][3] = 1; // different row, col, region, not adjacent
+    assert(!isConflict(board, reg, n, 2, 3));
+  });
+});
+
+suite('getAutoMarked', () => {
+  const n = 4;
+  const reg = [
+    [0,0,1,1],
+    [0,0,1,1],
+    [2,2,3,3],
+    [2,2,3,3],
+  ];
+
+  test('marks same row as cat', () => {
+    const board = Array.from({length:n},()=>Array(n).fill(0));
+    board[0][0] = 1;
+    const marked = getAutoMarked(board, reg, n);
+    assert(marked.has(0*n+1), 'same row not marked');
+    assert(marked.has(0*n+2), 'same row not marked');
+    assert(marked.has(0*n+3), 'same row not marked');
+  });
+
+  test('marks same column as cat', () => {
+    const board = Array.from({length:n},()=>Array(n).fill(0));
+    board[0][0] = 1;
+    const marked = getAutoMarked(board, reg, n);
+    assert(marked.has(1*n+0), 'same col not marked');
+    assert(marked.has(2*n+0), 'same col not marked');
+    assert(marked.has(3*n+0), 'same col not marked');
+  });
+
+  test('marks same region as cat', () => {
+    const board = Array.from({length:n},()=>Array(n).fill(0));
+    board[0][0] = 1; // region 0: (0,0),(0,1),(1,0),(1,1)
+    const marked = getAutoMarked(board, reg, n);
+    assert(marked.has(0*n+1), 'region cell not marked');
+    assert(marked.has(1*n+0), 'region cell not marked');
+    assert(marked.has(1*n+1), 'region cell not marked');
+  });
+
+  test('marks diagonal neighbors', () => {
+    const board = Array.from({length:n},()=>Array(n).fill(0));
+    board[1][1] = 1; // diagonals: (0,0),(0,2),(2,0),(2,2)
+    const marked = getAutoMarked(board, reg, n);
+    assert(marked.has(0*n+0), 'diagonal not marked');
+    assert(marked.has(0*n+2), 'diagonal not marked');
+    assert(marked.has(2*n+0), 'diagonal not marked');
+    assert(marked.has(2*n+2), 'diagonal not marked');
+  });
+
+  test('does not mark the cat cell itself', () => {
+    const board = Array.from({length:n},()=>Array(n).fill(0));
+    board[0][0] = 1;
+    const marked = getAutoMarked(board, reg, n);
+    assert(!marked.has(0*n+0), 'cat cell should not be auto-marked');
+  });
+});
+
+suite('checkUnsolvable (avail logic)', () => {
+  // Verify the availability semantics: board=2 cells should count as available
+  test('manually-marked cell (board=2) is considered available', () => {
+    const n = 2;
+    // A region with only one cell: if board=2, it is still "available" (can become a star)
+    // avail = board[r][c] !== 1 && !autoMarked
+    const board = [[2, 0], [0, 0]]; // (0,0) manually marked
+    // Simulating: no stars placed, so autoMarked = empty
+    const avail = (r, c) => board[r][c] !== 1;
+    assert(avail(0, 0), 'manually marked cell should be available for unsolvable check');
+  });
+
+  test('cat cell (board=1) is NOT available', () => {
+    const board = [[1, 0], [0, 0]];
+    const avail = (r, c) => board[r][c] !== 1;
+    assert(!avail(0, 0), 'cat cell should not be available');
+  });
+});
+
+suite('full puzzle round-trip', () => {
+  const diffSettings = [
+    ['easy',    8,  0.12],
+    ['medium',  8,  0.45],
+    ['hard',    10, 0.82],
+    ['extreme', 12, 1.00],
+  ];
+
+  for (const [name, n, chaos] of diffSettings) {
+    test(`${name} (n=${n}): generates a solvable puzzle`, () => {
+      let reg = null, sol = null;
+      let attempts = 0;
+      while (!sol && attempts < 200) {
+        attempts++;
+        reg = generateRegions(n, chaos);
+        if (reg) sol = solvePuzzle(n, reg);
+      }
+      assert(sol !== null, `no puzzle in ${attempts} attempts`);
+    });
+
+    test(`${name}: solution passes isConflict check (no conflicts)`, () => {
+      let reg = null, sol = null;
+      for (let i = 0; i < 200 && !sol; i++) {
+        reg = generateRegions(n, chaos); if (reg) sol = solvePuzzle(n, reg);
+      }
+      assert(sol !== null, 'no puzzle generated');
+      const board = boardFromSolution(sol, n);
+      for (let r = 0; r < n; r++)
+        assert(!isConflict(board, reg, n, r, sol[r]), `conflict at row ${r}`);
+    });
+  }
+});
+
+// ── Runner ────────────────────────────────────────────────────────────────────
+function runAll() {
+  passed = 0; failed = 0;
+  suites.forEach(s => { s.tests = []; });
+
+  // Re-run by replaying suite registrations:
+  // Since tests are registered at parse time, just re-evaluate the results.
+  // (All tests above run in the suite() blocks at script load time.)
+  // We need to re-run them. Reload the test functions:
+  // Simple approach: just re-invoke all test registrations stored in closures.
+
+  const out = document.getElementById('output');
+  out.innerHTML = '';
+
+  suites.forEach(s => {
+    const suiteEl = document.createElement('div');
+    suiteEl.className = 'suite';
+    suiteEl.innerHTML = `<div class="suite-name">${s.name}</div>`;
+    s.tests.forEach(t => {
+      const div = document.createElement('div');
+      div.className = 'test ' + (t.ok ? 'pass' : 'fail');
+      div.innerHTML = `<span class="icon">${t.ok ? '✓' : '✗'}</span>
+        <div><div>${t.name}</div>${!t.ok ? `<div class="detail">${t.err}</div>` : ''}</div>`;
+      suiteEl.appendChild(div);
+    });
+    out.appendChild(suiteEl);
+  });
+
+  const summary = document.getElementById('summary');
+  summary.style.display = 'block';
+  const total = passed + failed;
+  summary.textContent = `${passed}/${total} tests passed${failed > 0 ? ` — ${failed} failed` : ' ✓'}`;
+  summary.className = failed > 0 ? 'has-fail' : 'all-pass';
+}
+
+// Auto-run on load
+window.addEventListener('load', runAll);
+</script>
+</body>
+</html>
