@@ -1,0 +1,488 @@
+'use strict';
+// ==ENGINE-START==
+// Cold Shoulder engine — seeded, solution-first, unique-solution generator + logic grader.
+
+function xmur3(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return function () {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  };
+}
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function makeRng(seedStr) { return mulberry32(xmur3(String(seedStr))()); }
+function rngInt(rng, n) { return Math.floor(rng() * n); }
+function rngShuffle(rng, a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = rngInt(rng, i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function placeStars(n, rng) {
+  const sol = Array(n).fill(-1);
+  const usedCols = Array(n).fill(false);
+  function bt(row) {
+    if (row === n) return true;
+    const cols = rngShuffle(rng, Array.from({ length: n }, (_, i) => i));
+    for (const col of cols) {
+      if (usedCols[col]) continue;
+      if (row > 0 && Math.abs(sol[row - 1] - col) <= 1) continue;
+      sol[row] = col; usedCols[col] = true;
+      if (bt(row + 1)) return true;
+      sol[row] = -1; usedCols[col] = false;
+    }
+    return false;
+  }
+  return bt(0) ? sol : null;
+}
+const DIRS = [[-1, 0], [0, 1], [1, 0], [0, -1]]; // up right down left (rotation order)
+
+const DIFF = {
+  easy:    { n: 8,  minSize: 1, maxSize: 11, pins: 2, maxRounds: 120, maxCandidates: 40, weights: { blob: 0.70, elbow: 0.30, snake: 0,    spiral: 0    } },
+  medium:  { n: 8,  minSize: 2, maxSize: 12, pins: 2, maxRounds: 120, maxCandidates: 40, weights: { blob: 0.40, elbow: 0.30, snake: 0.20, spiral: 0.10 } },
+  hard:    { n: 10, minSize: 3, maxSize: 15, pins: 4, maxRounds: 160, maxCandidates: 30, weights: { blob: 0.20, elbow: 0.25, snake: 0.35, spiral: 0.20 } },
+  // Extreme stays 10×10: 12×12 one-star puzzles can't be made reliably unique
+  // without so many pinned regions that the logic turns shallow. Depth (t3 ≥ 4)
+  // is what makes extreme extreme, not board size.
+  extreme: { n: 10, minSize: 3, maxSize: 15, pins: 4, maxRounds: 160, maxCandidates: 30, weights: { blob: 0.15, elbow: 0.20, snake: 0.40, spiral: 0.25 } },
+};
+
+function pickPersonality(rng, weights) {
+  const entries = Object.entries(weights);
+  const x = rng();
+  let acc = 0;
+  for (const [k, w] of entries) { acc += w; if (x < acc) return k; }
+  return entries[0][0];
+}
+
+function partitionSizes(n, rng, minSize, maxSize) {
+  const sizes = Array(n).fill(n); // mean = n
+  for (let t = 0; t < 3 * n; t++) {
+    const a = rngInt(rng, n), b = rngInt(rng, n);
+    if (a !== b && sizes[a] > minSize && sizes[b] < maxSize) { sizes[a]--; sizes[b]++; }
+  }
+  return sizes;
+}
+
+function regionCellsOf(n, reg) {
+  const cells = Array.from({ length: n }, () => []);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) cells[reg[r][c]].push([r, c]);
+  return cells;
+}
+
+function growRegions(n, stars, rng, cfg) {
+  const reg = Array.from({ length: n }, () => Array(n).fill(-1));
+  const sizes = partitionSizes(n, rng, cfg.minSize, cfg.maxSize);
+  const gs = [];
+  for (let i = 0; i < n; i++) {
+    reg[i][stars[i]] = i;
+    gs.push({
+      id: i, cells: [[i, stars[i]]], target: sizes[i],
+      personality: pickPersonality(rng, cfg.weights),
+      lastDir: DIRS[rngInt(rng, 4)], step: 0,
+      axis: rngInt(rng, 2),
+      rotStart: rngInt(rng, 4), spin: rng() < 0.5 ? 1 : -1,
+    });
+  }
+  let unassigned = n * n - n;
+
+  function frontierOf(g) {
+    const seen = new Set(), out = [];
+    for (const [r, c] of g.cells) {
+      for (const [dr, dc] of DIRS) {
+        const nr = r + dr, nc = c + dc, k = nr * n + nc;
+        if (nr < 0 || nr >= n || nc < 0 || nc >= n || reg[nr][nc] !== -1 || seen.has(k)) continue;
+        seen.add(k); out.push({ r: nr, c: nc, dir: [dr, dc] });
+      }
+    }
+    return out;
+  }
+
+  function score(g, cand) {
+    let s = rng() * 0.9;
+    if (g.personality === 'blob') {
+      let cr = 0, cc = 0;
+      for (const [r, c] of g.cells) { cr += r; cc += c; }
+      cr /= g.cells.length; cc /= g.cells.length;
+      s += 3 - (Math.abs(cand.r - cr) + Math.abs(cand.c - cc)) * 0.8;
+    } else if (g.personality === 'snake') {
+      if (cand.dir[0] === g.lastDir[0] && cand.dir[1] === g.lastDir[1]) s += 2.2;
+    } else if (g.personality === 'elbow') {
+      const wantAxis = g.step < Math.max(2, g.target >> 1) ? g.axis : 1 - g.axis;
+      if ((wantAxis === 0 && cand.dir[1] === 0) || (wantAxis === 1 && cand.dir[0] === 0)) s += 2.2;
+    } else { // spiral
+      const idx = ((g.rotStart + Math.floor(g.step / 2) * g.spin) % 4 + 4) % 4;
+      const want = DIRS[idx];
+      if (cand.dir[0] === want[0] && cand.dir[1] === want[1]) s += 2.2;
+    }
+    return s;
+  }
+
+  // Phase 1: grow to targets, round-robin in rng order
+  let blocked = false;
+  while (unassigned > 0 && !blocked) {
+    const growers = gs.filter(g => g.cells.length < g.target);
+    if (!growers.length) break;
+    rngShuffle(rng, growers);
+    let grew = false;
+    for (const g of growers) {
+      const cands = frontierOf(g);
+      if (!cands.length) continue;
+      let best = cands[0], bs = -Infinity;
+      for (const cand of cands) { const sc = score(g, cand); if (sc > bs) { bs = sc; best = cand; } }
+      reg[best.r][best.c] = g.id;
+      g.cells.push([best.r, best.c]);
+      g.lastDir = best.dir; g.step++;
+      unassigned--; grew = true;
+      if (unassigned === 0) break;
+    }
+    if (!grew) blocked = true;
+  }
+  // Phase 2: absorb leftovers into smallest adjacent region
+  while (unassigned > 0) {
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+      if (reg[r][c] !== -1) continue;
+      let bestG = -1, bestSize = Infinity;
+      for (const [dr, dc] of DIRS) {
+        const nr = r + dr, nc = c + dc;
+        if (nr < 0 || nr >= n || nc < 0 || nc >= n) continue;
+        const g = reg[nr][nc];
+        if (g !== -1 && gs[g].cells.length < bestSize) { bestSize = gs[g].cells.length; bestG = g; }
+      }
+      if (bestG !== -1) { reg[r][c] = bestG; gs[bestG].cells.push([r, c]); unassigned--; }
+    }
+  }
+  return reg;
+}
+function countSolutions(n, reg, cap, collect) {
+  const regLastRow = Array(n).fill(-1);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++)
+    if (r > regLastRow[reg[r][c]]) regLastRow[reg[r][c]] = r;
+  let count = 0;
+  const sol = Array(n).fill(-1);
+  const usedCols = Array(n).fill(false);
+  const usedRegs = Array(n).fill(false);
+  function bt(row) {
+    if (count >= cap) return;
+    if (row === n) { count++; if (collect) collect.push(sol.slice()); return; }
+    for (let g = 0; g < n; g++) if (!usedRegs[g] && regLastRow[g] < row) return; // dead region prune
+    for (let col = 0; col < n; col++) {
+      if (usedCols[col]) continue;
+      const g = reg[row][col];
+      if (usedRegs[g]) continue;
+      if (row > 0 && Math.abs(sol[row - 1] - col) <= 1) continue;
+      sol[row] = col; usedCols[col] = true; usedRegs[g] = true;
+      bt(row + 1);
+      sol[row] = -1; usedCols[col] = false; usedRegs[g] = false;
+    }
+  }
+  bt(0);
+  return count;
+}
+
+function contiguousWithout(n, reg, gId, xr, xc) {
+  let start = null, size = 0;
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    if (reg[r][c] === gId && !(r === xr && c === xc)) { size++; if (!start) start = [r, c]; }
+  }
+  if (size === 0) return false;
+  const seen = new Set([start[0] * n + start[1]]);
+  const q = [start];
+  while (q.length) {
+    const [r, c] = q.pop();
+    for (const [dr, dc] of DIRS) {
+      const nr = r + dr, nc = c + dc, k = nr * n + nc;
+      if (nr < 0 || nr >= n || nc < 0 || nc >= n || seen.has(k)) continue;
+      if (reg[nr][nc] === gId && !(nr === xr && nc === xc)) { seen.add(k); q.push([nr, nc]); }
+    }
+  }
+  return seen.size === size;
+}
+
+function movableNeighbors(n, reg, solution, r, c) {
+  if (solution[r] === c) return null; // never move target-star cells
+  const from = reg[r][c];
+  const neigh = [];
+  for (const [dr, dc] of DIRS) {
+    const nr = r + dr, nc = c + dc;
+    if (nr < 0 || nr >= n || nc < 0 || nc >= n) continue;
+    const g = reg[nr][nc];
+    if (g !== from && neigh.indexOf(g) === -1) neigh.push(g);
+  }
+  if (!neigh.length) return null;
+  if (!contiguousWithout(n, reg, from, r, c)) return null; // donor must stay contiguous
+  return neigh;
+}
+
+// Shrink `pins` randomly-chosen regions down to their star cell (size 1).
+// Pinned stars are fully forced, which collapses the solution count and gives
+// the descent in makeUnique a reachable starting point.
+function shrinkPins(n, reg, stars, rng, pins) {
+  const order = rngShuffle(rng, Array.from({ length: n }, (_, i) => i)).slice(0, pins);
+  for (const g of order) {
+    let guard = 4 * n * n;
+    while (guard-- > 0) {
+      const cells = [];
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (reg[r][c] === g) cells.push([r, c]);
+      if (cells.length <= 1) break;
+      const sr = g, sc = stars[g];
+      cells.sort((a, b) => (Math.abs(b[0] - sr) + Math.abs(b[1] - sc)) - (Math.abs(a[0] - sr) + Math.abs(a[1] - sc)));
+      let stripped = false;
+      for (const [r, c] of cells) {
+        if (r === sr && c === sc) continue;
+        let to = -1;
+        for (const [dr, dc] of DIRS) {
+          const nr = r + dr, nc = c + dc;
+          if (nr < 0 || nr >= n || nc < 0 || nc >= n) continue;
+          if (reg[nr][nc] !== g) { to = reg[nr][nc]; break; }
+        }
+        if (to === -1 || !contiguousWithout(n, reg, g, r, c)) continue;
+        reg[r][c] = to; stripped = true; break;
+      }
+      if (!stripped) break;
+    }
+  }
+  return reg;
+}
+
+// Directed descent to a unique solution: repeatedly reassign the boundary cell
+// that the most alternative solutions route through, keeping a move only when
+// it strictly reduces the solution count; random perturbation on stalls.
+function makeUnique(n, reg, solution, rng, maxRounds) {
+  if (maxRounds === undefined) maxRounds = 150;
+  const CAP = 24;
+  let cnt = countSolutions(n, reg, CAP);
+  for (let t = 0; t < maxRounds; t++) {
+    if (cnt === 1) return reg;
+    const sols = [];
+    countSolutions(n, reg, CAP, sols);
+    const freq = new Map();
+    for (const s of sols) {
+      let same = true;
+      for (let r = 0; r < n; r++) if (s[r] !== solution[r]) { same = false; break; }
+      if (same) continue;
+      for (let r = 0; r < n; r++) if (s[r] !== solution[r]) {
+        const k = r * n + s[r];
+        freq.set(k, (freq.get(k) || 0) + 1);
+      }
+    }
+    const ranked = [...freq.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+    let improved = false;
+    for (const [k] of ranked.slice(0, 12)) {
+      const r = Math.floor(k / n), c = k % n;
+      const neigh = movableNeighbors(n, reg, solution, r, c);
+      if (!neigh) continue;
+      const from = reg[r][c];
+      reg[r][c] = neigh[rngInt(rng, neigh.length)];
+      const nc2 = countSolutions(n, reg, Math.min(cnt, CAP));
+      if (nc2 < cnt) { cnt = nc2; improved = true; break; }
+      reg[r][c] = from; // revert
+    }
+    if (!improved) {
+      const cells = [];
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) cells.push([r, c]);
+      rngShuffle(rng, cells);
+      let perturbed = false;
+      for (const [r, c] of cells) {
+        const neigh = movableNeighbors(n, reg, solution, r, c);
+        if (!neigh) continue;
+        reg[r][c] = neigh[rngInt(rng, neigh.length)];
+        cnt = countSolutions(n, reg, CAP);
+        perturbed = true; break;
+      }
+      if (!perturbed) return null;
+    }
+  }
+  return null;
+}
+function logicSolve(n, reg) {
+  // st: 0 unknown, 1 star, 2 eliminated
+  const st = Array.from({ length: n }, () => Array(n).fill(0));
+  const cells = regionCellsOf(n, reg);
+  let stars = 0, maxTier = 0, t3 = 0;
+
+  function elim(r, c) { if (st[r][c] === 0) { st[r][c] = 2; return true; } return false; }
+  function placeStar(r, c) {
+    st[r][c] = 1; stars++;
+    for (let i = 0; i < n; i++) { if (i !== c) elim(r, i); if (i !== r) elim(i, c); }
+    for (const [rr, cc] of cells[reg[r][c]]) if (rr !== r || cc !== c) elim(rr, cc);
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < n && nc >= 0 && nc < n) elim(nr, nc);
+    }
+  }
+
+  function unitAvail(kind, i) {
+    const out = []; let hasStar = false;
+    if (kind === 'row') { for (let c = 0; c < n; c++) { if (st[i][c] === 1) hasStar = true; else if (st[i][c] === 0) out.push([i, c]); } }
+    else if (kind === 'col') { for (let r = 0; r < n; r++) { if (st[r][i] === 1) hasStar = true; else if (st[r][i] === 0) out.push([r, i]); } }
+    else { for (const [r, c] of cells[i]) { if (st[r][c] === 1) hasStar = true; else if (st[r][c] === 0) out.push([r, c]); } }
+    return { avail: out, hasStar };
+  }
+  const UNITS = [];
+  for (let i = 0; i < n; i++) UNITS.push(['row', i], ['col', i], ['reg', i]);
+
+  while (stars < n) {
+    let progress = false;
+
+    // T1: single candidate in any unit
+    for (const [kind, i] of UNITS) {
+      const u = unitAvail(kind, i);
+      if (u.hasStar) continue;
+      if (u.avail.length === 0) return { solved: false, maxTier, t3 };
+      if (u.avail.length === 1) { placeStar(u.avail[0][0], u.avail[0][1]); progress = true; }
+    }
+    if (progress) { if (maxTier < 1) maxTier = 1; continue; }
+
+    // T2: region confined to one row/col; row/col confined to one region
+    for (let g = 0; g < n && !progress; g++) {
+      const u = unitAvail('reg', g);
+      if (u.hasStar || !u.avail.length) continue;
+      const rows = new Set(u.avail.map(rc => rc[0])), colsS = new Set(u.avail.map(rc => rc[1]));
+      if (rows.size === 1) {
+        const r = u.avail[0][0];
+        for (let c = 0; c < n; c++) if (reg[r][c] !== g && elim(r, c)) progress = true;
+      }
+      if (colsS.size === 1) {
+        const c = u.avail[0][1];
+        for (let r = 0; r < n; r++) if (reg[r][c] !== g && elim(r, c)) progress = true;
+      }
+    }
+    for (let i = 0; i < n && !progress; i++) {
+      for (const kind of ['row', 'col']) {
+        const u = unitAvail(kind, i);
+        if (u.hasStar || !u.avail.length) continue;
+        const regsIn = new Set(u.avail.map(([r, c]) => reg[r][c]));
+        if (regsIn.size === 1) {
+          const g = reg[u.avail[0][0]][u.avail[0][1]];
+          for (const [r, c] of cells[g]) {
+            const inUnit = kind === 'row' ? r === i : c === i;
+            if (!inUnit && elim(r, c)) progress = true;
+          }
+        }
+      }
+    }
+    if (progress) { if (maxTier < 2) maxTier = 2; continue; }
+
+    // T3a: k starless regions confined to k rows (or cols), k=2..3
+    const starless = [];
+    for (let g = 0; g < n; g++) {
+      const u = unitAvail('reg', g);
+      if (!u.hasStar && u.avail.length) starless.push({ g, avail: u.avail });
+    }
+    for (const dim of [0, 1]) {
+      if (progress) break;
+      const conf = starless
+        .map(s => ({ g: s.g, set: new Set(s.avail.map(rc => rc[dim])) }))
+        .filter(s => s.set.size <= 3);
+      const tryCombo = (members) => {
+        const union = new Set();
+        members.forEach(m => m.set.forEach(v => union.add(v)));
+        if (union.size !== members.length) return false;
+        let any = false;
+        const ids = new Set(members.map(m => m.g));
+        for (const line of union) for (let j = 0; j < n; j++) {
+          const r = dim === 0 ? line : j, c = dim === 0 ? j : line;
+          if (!ids.has(reg[r][c]) && elim(r, c)) any = true;
+        }
+        return any;
+      };
+      for (let a = 0; a < conf.length && !progress; a++)
+        for (let b = a + 1; b < conf.length && !progress; b++) {
+          if (tryCombo([conf[a], conf[b]])) { progress = true; break; }
+          for (let c2 = b + 1; c2 < conf.length && !progress; c2++)
+            if (tryCombo([conf[a], conf[b], conf[c2]])) progress = true;
+        }
+    }
+    if (progress) { maxTier = 3; t3++; continue; }
+
+    // T3b: strangle — a star at X would leave some starless unit with no cells
+    let strangled = false;
+    for (let r = 0; r < n && !strangled; r++) for (let c = 0; c < n && !strangled; c++) {
+      if (st[r][c] !== 0) continue;
+      const dead = (rr, cc) =>
+        rr === r || cc === c || reg[rr][cc] === reg[r][c] ||
+        (Math.abs(rr - r) <= 1 && Math.abs(cc - c) <= 1);
+      for (const [kind, i] of UNITS) {
+        const u = unitAvail(kind, i);
+        if (u.hasStar) continue;
+        if (u.avail.some(([rr, cc]) => rr === r && cc === c)) continue; // unit satisfied by X
+        if (u.avail.length && u.avail.every(([rr, cc]) => dead(rr, cc))) {
+          elim(r, c); progress = true; strangled = true; break;
+        }
+      }
+    }
+    if (progress) { maxTier = 3; t3++; continue; }
+
+    return { solved: false, maxTier, t3 };
+  }
+  return { solved: true, maxTier: maxTier || 1, t3 };
+}
+
+const BANDS = {
+  easy:    g => g.maxTier <= 2 && g.t3 === 0,                 // forced cells + simple confinement (8×8)
+  medium:  g => g.maxTier === 3 && g.t3 >= 1 && g.t3 <= 3,    // a few lookahead deductions (8×8)
+  hard:    g => g.maxTier === 3 && g.t3 >= 2 && g.t3 <= 3,    // deduction chains (10×10)
+  extreme: g => g.maxTier === 3 && g.t3 >= 4,                 // deep sustained chains (10×10)
+};
+const TARGET = { easy: [2, 0], medium: [3, 2], hard: [3, 3], extreme: [3, 5] };
+
+function gradeFits(grade, difficulty) {
+  return !!grade && grade.solved === true && BANDS[difficulty](grade);
+}
+function fitScore(grade, difficulty) {
+  if (!grade || !grade.solved) return Infinity;
+  const t = TARGET[difficulty];
+  return Math.abs(grade.maxTier - t[0]) * 10 + Math.abs((grade.t3 || 0) - t[1]);
+}
+function generateCandidate(seedStr, index, difficulty) {
+  const cfg = DIFF[difficulty];
+  if (!cfg) return null;
+  const rng = makeRng(seedStr + '#' + index);
+  const stars = placeStars(cfg.n, rng);
+  if (!stars) return null;
+  let reg = growRegions(cfg.n, stars, rng, cfg);
+  reg = shrinkPins(cfg.n, reg, stars, rng, cfg.pins);
+  reg = makeUnique(cfg.n, reg, stars, rng, cfg.maxRounds);
+  if (!reg) return null;
+  const grade = logicSolve(cfg.n, reg);
+  if (!grade.solved) return null;
+  return { n: cfg.n, regions: reg, solution: stars, difficulty, grade, seed: seedStr, index };
+}
+
+function generatePuzzle(seedStr, difficulty, maxCandidates) {
+  if (maxCandidates === undefined) maxCandidates = DIFF[difficulty] ? DIFF[difficulty].maxCandidates : 40;
+  let best = null, bestScore = Infinity;
+  for (let i = 0; i < maxCandidates; i++) {
+    const cand = generateCandidate(seedStr, i, difficulty);
+    if (!cand) continue;
+    if (gradeFits(cand.grade, difficulty)) return cand;
+    const s = fitScore(cand.grade, difficulty);
+    if (s < bestScore) { bestScore = s; best = cand; }
+  }
+  return best;
+}
+
+function utcDateStr(d) { return (d || new Date()).toISOString().slice(0, 10); }
+function dailySeed(dateStr, kind) { return 'coldshoulder-daily-' + dateStr + '-' + kind; }
+// ==ENGINE-END==
+
+if (typeof module !== 'undefined') module.exports = {
+  makeRng, rngInt, rngShuffle, placeStars, DIFF, growRegions, regionCellsOf,
+  countSolutions, shrinkPins, makeUnique, logicSolve, gradeFits, fitScore,
+  generateCandidate, generatePuzzle, utcDateStr, dailySeed,
+};
