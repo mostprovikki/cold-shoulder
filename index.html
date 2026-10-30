@@ -1,0 +1,2743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Cold Shoulder</title>
+  <meta name="description" content="A cat puzzle: one cat per row, column and box, and no two cats touching.">
+  <meta property="og:title" content="Cold Shoulder">
+  <meta property="og:description" content="A cat puzzle: one cat per row, column and box, and no two cats touching.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://mostprovikki.github.io/cold-shoulder/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Cold Shoulder: a grid of coloured boxes with one cat in each, none of them touching.">
+  <meta property="og:url" content="https://mostprovikki.github.io/cold-shoulder/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image:alt" content="Cold Shoulder: a grid of coloured boxes with one cat in each, none of them touching.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <style>
+  @font-face { font-family: 'Fredoka'; font-style: normal; font-weight: 400; font-display: swap; src: url('assets/fonts/fredoka-400.woff2') format('woff2'); }
+  @font-face { font-family: 'Fredoka'; font-style: normal; font-weight: 600; font-display: swap; src: url('assets/fonts/fredoka-600.woff2') format('woff2'); }
+  @font-face { font-family: 'Fredoka'; font-style: normal; font-weight: 700; font-display: swap; src: url('assets/fonts/fredoka-700.woff2') format('woff2'); }
+  :root {
+    --cell: 48px;
+    --radius: 10px;
+    /* Theme vars — overridden by applyTheme() */
+    --page-bg:       #f7f7f5;
+    --text-1:        #1a1a1a;
+    --text-2:        #555555;
+    --text-3:        #888888;
+    --btn-bg:        #ffffff;
+    --btn-hover:     #f0f0f0;
+    --btn-active:    #e8e8e6;
+    --border:        #cccccc;
+    --border-strong: #999999;
+    --cell-border:   rgba(0,0,0,0.08);
+    --region-border: rgba(0,0,0,0.50);
+    --star-fg:       #1a1a1a;
+    --mark-fg:       rgba(0,0,0,0.45);
+    --mark-auto-fg:  rgba(0,0,0,0.38);
+    --wrong-fg:      #c0392b;
+    --win-fg:        #1a7a4a;
+    --err-fg:        #c0392b;
+    /* Cat colours: set by the active coat (ginger shown as the pre-JS default) */
+    --fur:           #f4a259;
+    --stripe:        #c9702a;
+    --ink:           #5b3a29;
+    --ear:           #f2a7a0;
+    --eye:           #fff8c4;
+    --bib:           transparent;  /* tuxedo chest/muzzle */
+    --mask:          transparent;  /* siamese face mask */
+    --patch:         transparent;  /* calico / tortoiseshell blob 1 */
+    --patch-2:       transparent;  /* blob 2 */
+    --overlay-bg:    rgba(247,247,245,0.92);
+    --ui-font:       'Fredoka', system-ui, sans-serif;
+    --shadow-1: 0 1px 3px rgba(0,0,0,0.07);
+    --shadow-2: 0 8px 32px rgba(0,0,0,0.18);
+    /* Structural theme vars — shape, texture, motion */
+    --radius-lg:     18px;
+    --radius-md:     12px;
+    --radius-sm:     9px;
+    --grid-radius:   6px;
+    --grid-border-w: 2px;
+    --grid-glow:     var(--shadow-1);
+    --region-w:      2.5px;
+    --region-style:  solid;
+    --cell-style:    solid;
+    --star-glow:     none;
+    --speed-ui:      0.12s;
+    --page-texture:  none;
+    --page-texture-size: auto;
+    --screen-fx:     none;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background-color: var(--page-bg); font-family: var(--ui-font); color: var(--text-1);
+    background-image: var(--page-texture);
+    background-size: var(--page-texture-size);
+    background-attachment: fixed;
+    transition: background-color 0.3s, color 0.3s;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    min-height: 100vh;
+  }
+  /* Full-screen effect layer (scanlines, vignette) — set per theme via --screen-fx */
+  body::after {
+    content: ''; position: fixed; inset: 0; z-index: 998;
+    pointer-events: none; background: var(--screen-fx);
+  }
+  button { font-family: inherit; cursor: pointer; color: inherit; }
+  button:disabled { opacity: 0.35; cursor: default; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+  /* ── Top bar ─────────────────────────────────────────────────────────── */
+  #topbar {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: space-between;
+    max-width: 680px; margin: 0 auto; padding: 10px 14px 8px;
+    background: color-mix(in srgb, var(--page-bg) 88%, transparent);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  #brand { font-size: 19px; font-weight: 650; letter-spacing: 0.2px; display: flex; align-items: center; gap: 7px; }
+  #brand .brand-star { width: 26px; height: 26px; flex: none; }
+  #brand { min-width: 0; }
+  #brand .brand-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #streak-chip { flex: none; }
+  #top-actions { flex: none; }
+  #streak-chip {
+    font-size: 12px; font-weight: 600; color: var(--text-2);
+    background: var(--btn-bg); border: 1px solid var(--border); border-radius: 999px;
+    padding: 3px 9px; margin-left: 4px; display: none;
+  }
+  #top-actions { display: flex; gap: 6px; }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: var(--radius-md);
+    border: 1px solid var(--border); background: var(--btn-bg);
+    font-size: 16px; line-height: 1; display: flex; align-items: center; justify-content: center;
+    transition: background var(--speed-ui), transform 0.08s; box-shadow: var(--shadow-1);
+    color: var(--text-2);
+  }
+  .icon-btn svg { width: 17px; height: 17px; display: block; }
+  .icon-btn:hover { background: var(--btn-hover); }
+  #mute-btn .snd-off { display: none; }
+  #mute-btn.muted .snd-off { display: inline; }
+  #mute-btn.muted .snd-on { display: none; }
+  .icon-btn:active { transform: scale(0.93); }
+  .icon-btn.help-q { font-weight: 700; font-size: 17px; color: var(--text-2); }
+
+  /* ── Main layout ─────────────────────────────────────────────────────── */
+  #app {
+    max-width: 680px; margin: 0 auto; padding: 6px 14px 28px;
+    display: flex; flex-direction: column; align-items: center; gap: 13px;
+  }
+
+  /* Difficulty segmented control + New */
+  #setup-row { display: flex; gap: 8px; width: 100%; max-width: 460px; }
+  #diff-seg {
+    flex: 1; display: flex; gap: 2px; padding: 3px;
+    background: var(--btn-bg); border: 1px solid var(--border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-1);
+  }
+  #diff-seg button {
+    flex: 1; border: none; background: transparent; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 550; padding: 7px 2px; color: var(--text-2);
+    transition: background var(--speed-ui), color var(--speed-ui);
+  }
+  #diff-seg button:hover { background: var(--btn-hover); }
+  #diff-seg button.active { background: var(--text-1); color: var(--page-bg); font-weight: 650; }
+  #new-btn {
+    border: none; border-radius: var(--radius-md); padding: 0 18px;
+    background: var(--text-1); color: var(--page-bg);
+    font-size: 13px; font-weight: 650; box-shadow: var(--shadow-1);
+    transition: opacity 0.12s, transform 0.08s; white-space: nowrap;
+  }
+  #new-btn:hover { opacity: 0.86; }
+  #new-btn:active { transform: scale(0.96); }
+
+  /* Info bar: mode chip · progress · timer */
+  #info-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; max-width: 460px; gap: 8px; min-height: 30px;
+  }
+  #mode-chip {
+    font-size: 12px; font-weight: 600; color: var(--text-2);
+    background: var(--btn-bg); border: 1px solid var(--border);
+    border-radius: 999px; padding: 4px 11px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  #progress { font-size: 13px; font-weight: 650; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  #progress.done { color: var(--win-fg); }
+  #timer-box { display: flex; align-items: center; gap: 5px; }
+  #timer { font-size: 14px; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; min-width: 42px; text-align: right; }
+  #pause-btn {
+    width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--btn-bg); font-size: 11px; color: var(--text-2); display: flex; align-items: center; justify-content: center;
+  }
+  #pause-btn:hover { background: var(--btn-hover); }
+  #pause-btn svg { width: 12px; height: 12px; display: block; }
+
+  /* ── Grid ─────────────────────────────────────────────────────────────── */
+  #grid-wrap { position: relative; border-radius: 8px; }
+  #grid {
+    display: grid; border: var(--grid-border-w) solid var(--border-strong); border-radius: var(--grid-radius);
+    overflow: hidden; touch-action: none; transition: filter 0.25s, box-shadow 0.35s;
+    box-shadow: var(--grid-glow);
+  }
+  #grid-wrap.paused #grid, #grid-wrap.generating #grid { filter: blur(9px) saturate(0.7); pointer-events: none; }
+  .cell {
+    width: var(--cell); height: var(--cell);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; position: relative; transition: filter var(--speed-ui), box-shadow var(--speed-ui);
+    user-select: none; -webkit-user-select: none; touch-action: none; border: 1px var(--cell-style) var(--cell-border);
+  }
+  .cell:hover { filter: brightness(0.93); }
+  .cell svg { display: block; pointer-events: none; }
+  .cell svg.cat  { width: 86%; height: 86%; }
+  .cell svg.paw  { width: 52%; height: 52%; color: var(--mark-fg); }
+  .cell svg.paw.auto { width: 46%; height: 46%; color: var(--mark-auto-fg); }
+  .cell.wrong svg.cat { filter: drop-shadow(0 0 2px var(--wrong-fg)); animation: cat-shake 0.28s ease-in-out infinite alternate; }
+  @keyframes cat-shake { from { transform: rotate(-9deg) translateX(-1px); } to { transform: rotate(9deg) translateX(1px); } }
+  .clash-bubble {
+    position: absolute; z-index: 4; left: 0; top: 0; pointer-events: none; white-space: nowrap;
+    background: var(--text-1); color: var(--page-bg); font-weight: 800; font-size: 13px; line-height: 1;
+    letter-spacing: 0.02em; padding: 6px 9px; border-radius: 10px; box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+    animation: bubble-pop 0.22s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  #grid-wrap.paused .clash-bubble, #grid-wrap.generating .clash-bubble { display: none; }
+  @keyframes bubble-pop { from { opacity: 0; scale: 0.4; } to { opacity: 1; scale: 1; } }
+  .cell .zzz {
+    position: absolute; right: 12%; top: 8%; z-index: 2; pointer-events: none;
+    font-weight: 800; font-size: clamp(9px, calc(var(--cell) * 0.28), 15px); line-height: 1; color: var(--text-2);
+    animation: zzz-float 2.2s ease-out infinite;
+  }
+  @keyframes zzz-float { from { transform: translateY(6px); opacity: 0; } 25% { opacity: 1; } to { transform: translateY(-8px); opacity: 0; } }
+  .cell.auto-marker    { animation: cell-ripple 0.28s ease-out var(--mark-delay,0ms) both; }
+  .cell.auto-marker svg { animation: auto-mark-in 0.22s cubic-bezier(0.34,1.56,0.64,1) var(--mark-delay,0ms) both; }
+  .cell.star-pop svg { animation: star-pop 0.45s cubic-bezier(0.175,0.885,0.32,1.275) forwards; }
+  .cell.hint-flash  { animation: hint-pulse 0.6s ease-in-out 2; }
+  .cell.correct-flash { animation: win-bounce 0.65s cubic-bezier(0.36,0.07,0.19,0.97) var(--win-delay,0ms) both; }
+  .thick-top    { border-top:    var(--region-w) var(--region-style) var(--region-border) !important; }
+  .thick-right  { border-right:  var(--region-w) var(--region-style) var(--region-border) !important; }
+  .thick-bottom { border-bottom: var(--region-w) var(--region-style) var(--region-border) !important; }
+  .thick-left   { border-left:   var(--region-w) var(--region-style) var(--region-border) !important; }
+  .cell.intro { animation: cell-in 0.3s ease-out var(--in-delay, 0ms) both; }
+
+  /* Pause cover & generation overlay (inside grid-wrap) */
+  #pause-cover, #gen-overlay {
+    display: none; position: absolute; inset: 0; z-index: 10;
+    flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    border-radius: 6px; text-align: center;
+  }
+  #grid-wrap.paused #pause-cover { display: flex; }
+  #grid-wrap.generating #gen-overlay { display: flex; }
+  #grid-wrap.generating { min-height: 200px; min-width: 240px; }
+  #pause-cover .pc-title { font-size: 17px; font-weight: 700; color: var(--text-1); }
+  #pause-cover button {
+    border: none; border-radius: 10px; padding: 9px 22px;
+    background: var(--text-1); color: var(--page-bg); font-size: 13px; font-weight: 650;
+  }
+  #gen-overlay .gen-title { font-size: 14px; font-weight: 600; color: var(--text-1); }
+  #gen-count { font-size: 12px; color: var(--text-3); }
+  .spinner {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 3px solid var(--border); border-top-color: var(--text-1);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Toolbar ─────────────────────────────────────────────────────────── */
+  #toolbar { display: flex; gap: 7px; justify-content: center; flex-wrap: wrap; }
+  .tool-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    min-width: 62px; padding: 8px 10px 7px; border-radius: var(--radius-md);
+    border: 1px solid var(--border); background: var(--btn-bg);
+    font-size: 11px; font-weight: 600; color: var(--text-2);
+    transition: background 0.12s, transform 0.08s; box-shadow: var(--shadow-1);
+  }
+  .tool-btn:hover:not(:disabled) { background: var(--btn-hover); }
+  .tool-btn:active:not(:disabled) { transform: scale(0.94); }
+  .tool-btn .tool-ico { font-size: 17px; line-height: 1; height: 17px; display: flex; align-items: center; }
+  .tool-btn .tool-ico svg { width: 16px; height: 16px; display: block; }
+  .tool-btn[hidden] { display: none; }
+
+  #rules-line { font-size: 11.5px; color: var(--text-3); text-align: center; line-height: 1.6; max-width: 360px; }
+  #rules-line b { color: var(--text-2); }
+
+  /* ── Toast ───────────────────────────────────────────────────────────── */
+  #toast {
+    position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(14px);
+    background: var(--text-1); color: var(--page-bg);
+    font-size: 13px; font-weight: 550; padding: 10px 18px; border-radius: 999px;
+    box-shadow: var(--shadow-2); z-index: 400; opacity: 0; pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s; max-width: 86vw; text-align: center;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.err { background: var(--err-fg); color: #fff; }
+  #toast.win { background: var(--win-fg); color: #fff; }
+
+  /* ── Modals ──────────────────────────────────────────────────────────── */
+  #modal-backdrop {
+    position: fixed; inset: 0; z-index: 200; display: none;
+    align-items: flex-end; justify-content: center;
+    background: rgba(0,0,0,0.45); padding: 16px;
+    animation: fade-in 0.18s ease-out;
+  }
+  #modal-backdrop.open { display: flex; }
+  @media (min-width: 520px) { #modal-backdrop { align-items: center; } }
+  .modal {
+    display: none; width: 100%; max-width: 430px; max-height: 84vh; overflow-y: auto;
+    background: var(--btn-bg); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 18px 18px 20px; box-shadow: var(--shadow-2);
+    animation: modal-in 0.22s cubic-bezier(0.175,0.885,0.32,1.15);
+  }
+  .modal.open { display: block; }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .modal-head h2 { font-size: 16px; font-weight: 700; color: var(--text-1); }
+  .modal-close {
+    width: 30px; height: 30px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: transparent; font-size: 13px; color: var(--text-2);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal-close:hover { background: var(--btn-hover); }
+  .panel-sub { font-size: 12px; color: var(--text-3); text-align: center; margin-bottom: 6px; }
+  .panel-sub.strong { color: var(--text-2); font-weight: 650; }
+
+  /* Rows shared by daily / stats / library lists */
+  .list-col { display: flex; flex-direction: column; gap: 6px; }
+  .row-card {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 10px 13px; background: var(--page-bg);
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    transition: background 0.12s, transform 0.08s;
+  }
+  .row-card.clickable { cursor: pointer; }
+  .row-card.clickable:hover { background: var(--btn-hover); }
+  .row-card.clickable:active { transform: scale(0.985); }
+  .row-label { font-weight: 650; color: var(--text-1); font-size: 13.5px; }
+  .row-meta { color: var(--text-3); font-size: 12px; flex: 1; text-align: right; }
+  .badge { font-size: 11px; font-weight: 650; padding: 2.5px 8px; border-radius: 6px; white-space: nowrap; }
+  .badge-done    { background: #d4edda; color: #1a5e35; }
+  .badge-easy    { background: #e8f4ff; color: #1a4a80; }
+  .badge-medium  { background: #fff8e0; color: #7a5a00; }
+  .badge-hard    { background: #ffe0dc; color: #7a2010; }
+  .badge-extreme { background: #f0d8ff; color: #5a1080; }
+  .row-play { font-size: 12px; color: var(--text-3); }
+
+  /* Theme picker */
+  #theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .theme-card {
+    border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 11px 12px;
+    cursor: pointer; display: flex; flex-direction: column; gap: 7px;
+    transition: border-color 0.12s, transform 0.08s; background: none; text-align: left;
+  }
+  .theme-card:hover { transform: translateY(-1px); }
+  .theme-card.active { border-color: currentColor; box-shadow: 0 0 0 1.5px currentColor inset; }
+  .theme-card .tc-name { font-size: 13px; font-weight: 650; display: flex; justify-content: space-between; align-items: center; }
+  .theme-card .tc-cat { flex: none; }
+  .theme-card .tc-dots { display: flex; gap: 4px; }
+  .theme-card .tc-dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.12); }
+  .theme-card .tc-desc { font-size: 11px; opacity: 0.62; margin: 1px 0 5px; display: block; }
+
+  /* Stats tiles */
+  #stats-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .stat-tile {
+    background: var(--page-bg); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 12px; display: flex; flex-direction: column; gap: 3px; align-items: center;
+  }
+  .stat-tile .st-val { font-size: 20px; font-weight: 750; color: var(--text-1); font-variant-numeric: tabular-nums; }
+  .stat-tile .st-lbl { font-size: 11px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+
+  /* Help modal */
+  .help-sec { margin-bottom: 14px; }
+  .help-sec h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-3); margin-bottom: 7px; }
+  .help-sec p, .help-sec li { font-size: 13px; color: var(--text-2); line-height: 1.65; }
+  .help-sec ul { padding-left: 18px; }
+  .help-sec .demo-cell {
+    display: inline-flex; width: 22px; height: 22px; border: 1px solid var(--border);
+    border-radius: 5px; align-items: center; justify-content: center; font-size: 13px;
+    vertical-align: -5px; margin: 0 2px; background: var(--page-bg);
+  }
+  .help-sec .demo-cell svg { width: 16px; height: 16px; }
+  .kbd-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 13px; color: var(--text-2); }
+  kbd {
+    background: var(--page-bg); border: 1px solid var(--border); border-bottom-width: 2px;
+    border-radius: 5px; padding: 1px 7px; font-size: 11.5px; font-family: inherit; font-weight: 650;
+  }
+
+  /* Library */
+  #lib-json {
+    width: 100%; height: 84px; font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+    padding: 9px; border: 1px solid var(--border); border-radius: 9px; resize: vertical;
+    background: var(--page-bg); color: var(--text-1); margin-bottom: 8px;
+  }
+  .modal .primary-btn {
+    border: none; border-radius: var(--radius-sm); padding: 9px 18px;
+    background: var(--text-1); color: var(--page-bg); font-size: 13px; font-weight: 650;
+  }
+  .modal .secondary-btn {
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 18px;
+    background: var(--btn-hover); color: var(--text-1); font-size: 13px; font-weight: 650;
+  }
+
+  /* Win / fail / confirm cards */
+  .center-card { text-align: center; }
+  .center-card h2 { font-size: 20px; font-weight: 750; margin-bottom: 4px; letter-spacing: -0.2px; }
+  .center-card .cc-sub { font-size: 13px; color: var(--text-3); line-height: 1.6; margin-bottom: 16px; }
+  .win-medal {
+    width: 62px; height: 62px; margin: 10px auto 14px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--page-bg);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--star-fg) 7%, transparent),
+                inset 0 0 0 1px color-mix(in srgb, var(--star-fg) 20%, transparent);
+    animation: medal-in 0.5s cubic-bezier(0.175,0.885,0.32,1.2) both;
+  }
+  .win-medal svg { width: 40px; height: 40px; display: block; }
+  .win-medal.fail svg { display: none; }
+  .win-medal.fail { box-shadow: 0 0 0 6px color-mix(in srgb, var(--err-fg) 8%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--err-fg) 25%, transparent); }
+  .win-medal.fail::after { content: '!'; font-weight: 750; font-size: 26px; color: var(--err-fg); text-shadow: none; }
+  @keyframes medal-in { from { transform: scale(0.4); opacity: 0; } }
+  .win-tags { display: flex; justify-content: center; gap: 6px; margin: -6px 0 16px; }
+  .win-tag {
+    font-size: 10px; font-weight: 750; letter-spacing: 0.9px; text-transform: uppercase;
+    padding: 4.5px 11px; border-radius: 999px;
+    background: var(--btn-hover); color: var(--text-2);
+  }
+  .win-tag.accent { background: color-mix(in srgb, var(--win-fg) 13%, transparent); color: var(--win-fg); }
+  .cc-stats { display: flex; justify-content: center; margin: 0 0 18px; }
+  .cc-stat { padding: 3px 20px; border-left: 1px solid var(--border); min-width: 72px; }
+  .cc-stat:first-child { border-left: none; }
+  .cc-stat .v { font-size: 21px; font-weight: 750; font-variant-numeric: tabular-nums; letter-spacing: -0.3px; }
+  .cc-stat .l { font-size: 10px; color: var(--text-3); font-weight: 650; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px; }
+  .cc-actions { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
+
+  /* ── Animations ──────────────────────────────────────────────────────── */
+  @keyframes fade-in  { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes modal-in { from { opacity: 0; transform: translateY(22px) scale(0.97); } to { opacity: 1; transform: none; } }
+  @keyframes cell-in  { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+  @keyframes star-pop {
+    0%   { transform: scale(0) rotate(-35deg); opacity: 0; }
+    45%  { transform: scale(1.65) rotate(12deg); opacity: 1; }
+    65%  { transform: scale(0.8) rotate(-6deg); }
+    82%  { transform: scale(1.15) rotate(3deg); }
+    100% { transform: scale(1) rotate(0deg); }
+  }
+  @keyframes auto-mark-in {
+    0%   { opacity: 0; transform: scale(0.2) rotate(20deg); }
+    70%  { transform: scale(1.2) rotate(-4deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+  @keyframes cell-ripple {
+    0%   { filter: brightness(1); }
+    40%  { filter: brightness(0.72); }
+    100% { filter: brightness(1); }
+  }
+  @keyframes hint-pulse {
+    0%,100% { filter: brightness(1); }
+    50%     { filter: brightness(0.6) saturate(2); }
+  }
+  @keyframes win-bounce {
+    0%   { transform: scale(1); filter: brightness(1); }
+    18%  { transform: scale(1.45); filter: brightness(1.35) hue-rotate(15deg); }
+    36%  { transform: scale(0.88); filter: brightness(0.9); }
+    54%  { transform: scale(1.22); filter: brightness(1.2) hue-rotate(-10deg); }
+    72%  { transform: scale(0.96); }
+    100% { transform: scale(1); filter: brightness(1); }
+  }
+  /* ── Theme-specific structure & motion ─────────────────────────────── */
+  /* Crisp coats (Tuxedo, Tortoiseshell): hard-edged hover, tracked uppercase controls */
+  body[data-theme="tuxedo"] .cell:hover,
+  body[data-theme="tortie"] .cell:hover { filter: none; box-shadow: inset 0 0 0 1.5px var(--star-fg); }
+  body[data-theme="tuxedo"] #brand, body[data-theme="tortie"] #brand,
+  body[data-theme="tuxedo"] #diff-seg button, body[data-theme="tortie"] #diff-seg button,
+  body[data-theme="tuxedo"] #new-btn, body[data-theme="tortie"] #new-btn,
+  body[data-theme="tuxedo"] .tool-btn, body[data-theme="tortie"] .tool-btn,
+  body[data-theme="tuxedo"] .primary-btn, body[data-theme="tortie"] .primary-btn,
+  body[data-theme="tuxedo"] .secondary-btn, body[data-theme="tortie"] .secondary-btn {
+    text-transform: uppercase; letter-spacing: 0.6px;
+  }
+  /* Tortoiseshell: chunky offset shadows, presses translate instead of scale */
+  body[data-theme="tortie"] .icon-btn, body[data-theme="tortie"] #diff-seg,
+  body[data-theme="tortie"] .tool-btn, body[data-theme="tortie"] #new-btn {
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+  }
+  body[data-theme="tortie"] .icon-btn:active,
+  body[data-theme="tortie"] .tool-btn:active:not(:disabled),
+  body[data-theme="tortie"] #new-btn:active { transform: translate(2px, 2px); box-shadow: none; }
+  /* Black cat: wide-tracked, lighter-weight headings */
+  body[data-theme="black"] #brand { letter-spacing: 2.5px; font-weight: 500; }
+  body[data-theme="black"] .modal-head h2,
+  body[data-theme="black"] .center-card h2 { letter-spacing: 1px; font-weight: 600; }
+  /* Star placement motion per theme family */
+  @keyframes pop-snap  { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  body[data-theme="tuxedo"] .cell.star-pop svg,
+  body[data-theme="tortie"] .cell.star-pop svg { animation: pop-snap 0.16s steps(3, end) both; }
+  @keyframes pop-bloom { 0% { transform: scale(0.3); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+  body[data-theme="calico"] .cell.star-pop svg,
+  body[data-theme="siamese"] .cell.star-pop svg,
+  body[data-theme="blue"] .cell.star-pop svg { animation: pop-bloom 0.6s cubic-bezier(0.22,1,0.36,1) both; }
+  @keyframes pop-glow  { 0% { transform: scale(0.4); opacity: 0; filter: blur(4px); } 100% { transform: scale(1); opacity: 1; filter: blur(0); } }
+  body[data-theme="black"] .cell.star-pop svg { animation: pop-glow 0.5s ease-out both; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cell.intro, .cell.auto-marker, .cell.auto-marker svg, .cell.star-pop svg, .cell.correct-flash,
+    .modal, #modal-backdrop, .win-medal, .cell.wrong svg.cat, .clash-bubble, .cell .zzz { animation: none !important; }
+    .cell .zzz { opacity: 0.85; }
+    .icon-btn:active, .tool-btn:active, #new-btn:active { transform: none; }
+  }
+  @media (max-width: 480px) {
+    #brand { font-size: 17px; }
+    .icon-btn { width: 36px; height: 36px; border-radius: 11px; }
+    #diff-seg button { font-size: 12px; padding: 8px 1px; }
+    #new-btn { padding: 0 13px; }
+    .tool-btn { min-width: 58px; padding: 7px 7px 6px; }
+    #app { gap: 11px; }
+  }
+  /* Phones up to 400px: 6 icon buttons + brand must fit one row on every coat (coat tracking/uppercase dropped here) */
+  @media (max-width: 400px) {
+    #topbar { padding-left: 10px; padding-right: 10px; }
+    body[data-theme] #brand { font-size: 15px; letter-spacing: 0; text-transform: none; gap: 4px; }
+    #brand .brand-star { width: 22px; height: 22px; }
+    #top-actions { gap: 3px; }
+    .icon-btn { width: 33px; height: 33px; border-radius: 10px; }
+  }
+  @media (max-width: 340px) {
+    body[data-theme] #brand { font-size: 14px; }
+    #brand .brand-star { display: none; }
+    #top-actions { gap: 2px; }
+    .icon-btn { width: 32px; height: 32px; }
+  }
+  </style>
+</head>
+<body>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <clipPath id="clip-calm"><path d="M7.5 15.5 9 4.5l8 6.3q3-1 6 0l8-6.3 1.5 11q2.8 4.4 1.6 9.6C32.6 31.6 27 35 20 35S7.4 31.6 5.9 25.1q-1.2-5.2 1.6-9.6Z"/></clipPath>
+      <clipPath id="clip-mad"><path d="M7.5 17.5 0.8 11.5 12 11Q20 8.8 28 11L39.2 11.5 32.5 17.5 37.5 20 34.2 22 38 25 34.5 27.3 37 30.5 32.3 31.5C30 34 25 35.5 20 35.5S10 34 7.7 31.5L3 30.5 5.5 27.3 2 25 5.8 22 2.5 20Z"/></clipPath>
+      <!-- calm cat (asleep). Layers (bib, mask, patch, patch-2) default to transparent; coats set them. They sit under the outline. -->
+      <symbol id="cat-calm" viewBox="0 0 40 40">
+        <path d="M7.5 15.5 9 4.5l8 6.3q3-1 6 0l8-6.3 1.5 11q2.8 4.4 1.6 9.6C32.6 31.6 27 35 20 35S7.4 31.6 5.9 25.1q-1.2-5.2 1.6-9.6Z" style="fill:var(--fur)"/>
+        <g clip-path="url(#clip-calm)">
+          <ellipse class="layer-bib" cx="20" cy="31" rx="8.5" ry="7" style="fill:var(--bib)"/>
+          <ellipse class="layer-mask" cx="20" cy="23" rx="9.5" ry="8.5" style="fill:var(--mask)"/>
+          <circle class="layer-patch" cx="11" cy="12.5" r="8" style="fill:var(--patch)"/>
+          <circle class="layer-patch-2" cx="31" cy="27" r="7" style="fill:var(--patch-2)"/>
+        </g>
+        <path d="M7.5 15.5 9 4.5l8 6.3q3-1 6 0l8-6.3 1.5 11q2.8 4.4 1.6 9.6C32.6 31.6 27 35 20 35S7.4 31.6 5.9 25.1q-1.2-5.2 1.6-9.6Z" fill="none" style="stroke:var(--ink)" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M11 9.3l1 4.6 3.2-2.6ZM29 9.3l-1 4.6-3.2-2.6Z" style="fill:var(--ear)"/>
+        <path d="M17.6 12.4l.5 3.4M20 12v3.8M22.4 12.4l-.5 3.4" style="stroke:var(--stripe)" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M12.5 21.5q2.6 2.2 5.2 0M22.3 21.5q2.6 2.2 5.2 0" fill="none" style="stroke:var(--ink)" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M18.6 25h2.8L20 26.8Z" fill="#e2777a"/>
+        <path d="M20 26.8q-1 2.2-3.2 1.3M20 26.8q1 2.2 3.2 1.3" fill="none" style="stroke:var(--ink)" stroke-width="1.4" stroke-linecap="round"/>
+        <path d="M3.5 24.2l6 .9M4 28.6l5.8-1.3M36.5 24.2l-6 .9M36 28.6l-5.8-1.3" style="stroke:var(--ink)" stroke-width="1.1" stroke-linecap="round" opacity=".55"/>
+      </symbol>
+      <!-- calm cat, simple (small cells): no whiskers, no stripes -->
+      <symbol id="cat-calm-s" viewBox="0 0 40 40">
+        <path d="M7.5 15.5 9 4.5l8 6.3q3-1 6 0l8-6.3 1.5 11q2.8 4.4 1.6 9.6C32.6 31.6 27 35 20 35S7.4 31.6 5.9 25.1q-1.2-5.2 1.6-9.6Z" style="fill:var(--fur)"/>
+        <g clip-path="url(#clip-calm)">
+          <ellipse class="layer-bib" cx="20" cy="31" rx="8.5" ry="7" style="fill:var(--bib)"/>
+          <ellipse class="layer-mask" cx="20" cy="23" rx="9.5" ry="8.5" style="fill:var(--mask)"/>
+          <circle class="layer-patch" cx="11" cy="12.5" r="8" style="fill:var(--patch)"/>
+          <circle class="layer-patch-2" cx="31" cy="27" r="7" style="fill:var(--patch-2)"/>
+        </g>
+        <path d="M7.5 15.5 9 4.5l8 6.3q3-1 6 0l8-6.3 1.5 11q2.8 4.4 1.6 9.6C32.6 31.6 27 35 20 35S7.4 31.6 5.9 25.1q-1.2-5.2 1.6-9.6Z" fill="none" style="stroke:var(--ink)" stroke-width="2.6" stroke-linejoin="round"/>
+        <path d="M11 9.3l1 4.6 3.2-2.6ZM29 9.3l-1 4.6-3.2-2.6Z" style="fill:var(--ear)"/>
+        <path d="M12.5 21.5q2.6 2.2 5.2 0M22.3 21.5q2.6 2.2 5.2 0" fill="none" style="stroke:var(--ink)" stroke-width="2.4" stroke-linecap="round"/>
+        <path d="M18.2 25h3.6L20 27.2Z" fill="#e2777a"/>
+      </symbol>
+      <!-- puffed cat: ears pinned out sideways (airplane ears) + spiked fur outline -->
+      <symbol id="cat-mad" viewBox="0 0 40 40">
+        <path d="M7.5 17.5 0.8 11.5 12 11Q20 8.8 28 11L39.2 11.5 32.5 17.5 37.5 20 34.2 22 38 25 34.5 27.3 37 30.5 32.3 31.5C30 34 25 35.5 20 35.5S10 34 7.7 31.5L3 30.5 5.5 27.3 2 25 5.8 22 2.5 20Z" style="fill:var(--fur)"/>
+        <g clip-path="url(#clip-mad)">
+          <ellipse class="layer-bib" cx="20" cy="31" rx="8.5" ry="7" style="fill:var(--bib)"/>
+          <ellipse class="layer-mask" cx="20" cy="23" rx="9.5" ry="8.5" style="fill:var(--mask)"/>
+          <circle class="layer-patch" cx="11" cy="12.5" r="8" style="fill:var(--patch)"/>
+          <circle class="layer-patch-2" cx="31" cy="27" r="7" style="fill:var(--patch-2)"/>
+        </g>
+        <path d="M7.5 17.5 0.8 11.5 12 11Q20 8.8 28 11L39.2 11.5 32.5 17.5 37.5 20 34.2 22 38 25 34.5 27.3 37 30.5 32.3 31.5C30 34 25 35.5 20 35.5S10 34 7.7 31.5L3 30.5 5.5 27.3 2 25 5.8 22 2.5 20Z" fill="none" style="stroke:var(--ink)" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M17.6 12.4l.5 3.4M20 12v3.8M22.4 12.4l-.5 3.4" style="stroke:var(--stripe)" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M11 17.4l6.2 2.4M29 17.4l-6.2 2.4" style="stroke:var(--ink)" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="15" cy="22.5" r="2.7" style="fill:var(--eye);stroke:var(--ink)" stroke-width="1.4"/>
+        <circle cx="25" cy="22.5" r="2.7" style="fill:var(--eye);stroke:var(--ink)" stroke-width="1.4"/>
+        <path d="M15 20.6v3.8M25 20.6v3.8" style="stroke:var(--ink)" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M15.5 29q4.5-4.2 9 0q-4.5 3.8-9 0Z" fill="#7a2e2e" style="stroke:var(--ink)" stroke-width="1.2"/>
+        <path d="M17.3 27.7l.9 1.8.9-1.6ZM20.9 27.9l.9 1.6.9-1.8Z" fill="#fff"/>
+      </symbol>
+      <!-- puffed cat, simple (small cells): no whiskers, no stripes -->
+      <symbol id="cat-mad-s" viewBox="0 0 40 40">
+        <path d="M7.5 17.5 0.8 11.5 12 11Q20 8.8 28 11L39.2 11.5 32.5 17.5 37.5 20 34.2 22 38 25 34.5 27.3 37 30.5 32.3 31.5C30 34 25 35.5 20 35.5S10 34 7.7 31.5L3 30.5 5.5 27.3 2 25 5.8 22 2.5 20Z" style="fill:var(--fur)"/>
+        <g clip-path="url(#clip-mad)">
+          <ellipse class="layer-bib" cx="20" cy="31" rx="8.5" ry="7" style="fill:var(--bib)"/>
+          <ellipse class="layer-mask" cx="20" cy="23" rx="9.5" ry="8.5" style="fill:var(--mask)"/>
+          <circle class="layer-patch" cx="11" cy="12.5" r="8" style="fill:var(--patch)"/>
+          <circle class="layer-patch-2" cx="31" cy="27" r="7" style="fill:var(--patch-2)"/>
+        </g>
+        <path d="M7.5 17.5 0.8 11.5 12 11Q20 8.8 28 11L39.2 11.5 32.5 17.5 37.5 20 34.2 22 38 25 34.5 27.3 37 30.5 32.3 31.5C30 34 25 35.5 20 35.5S10 34 7.7 31.5L3 30.5 5.5 27.3 2 25 5.8 22 2.5 20Z" fill="none" style="stroke:var(--ink)" stroke-width="2.4" stroke-linejoin="round"/>
+        <path d="M11 17.4l6.2 2.4M29 17.4l-6.2 2.4" style="stroke:var(--ink)" stroke-width="2.6" stroke-linecap="round"/>
+        <circle cx="15" cy="23" r="3" style="fill:var(--eye);stroke:var(--ink)" stroke-width="1.8"/>
+        <circle cx="25" cy="23" r="3" style="fill:var(--eye);stroke:var(--ink)" stroke-width="1.8"/>
+        <path d="M15.5 29q4.5-4.2 9 0q-4.5 3.8-9 0Z" fill="#7a2e2e" style="stroke:var(--ink)" stroke-width="1.6"/>
+      </symbol>
+      <!-- paw mark (colour comes from currentColor) -->
+      <symbol id="paw" viewBox="0 0 40 40">
+        <g fill="currentColor"><ellipse cx="20" cy="26.5" rx="8.5" ry="7.2"/><circle cx="9.5" cy="16.5" r="3.8"/><circle cx="16.3" cy="10.4" r="3.8"/><circle cx="23.7" cy="10.4" r="3.8"/><circle cx="30.5" cy="16.5" r="3.8"/></g>
+      </symbol>
+    </defs>
+  </svg>
+  <h2 class="sr-only">Cold Shoulder: place one cat in every row, column and box. Cats cannot touch.</h2>
+
+  <header id="topbar">
+    <div id="brand"><svg class="brand-star" aria-hidden="true"><use href="#cat-calm"></use></svg> <span class="brand-name">Cold Shoulder</span> <span id="streak-chip"></span></div>
+    <nav id="top-actions">
+      <button class="icon-btn" onclick="openModal('daily')"   title="Daily Nap" aria-label="Daily Nap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10.5h17"/></svg></button>
+      <button class="icon-btn" onclick="openModal('stats')"   title="Statistics"    aria-label="Statistics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 19.5v-7M12 19.5v-15M18.5 19.5v-5"/></svg></button>
+      <button class="icon-btn" onclick="openModal('library')" title="Box library" aria-label="Box library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2.5H20v19H6.5A2.5 2.5 0 0 1 4 19V5a2.5 2.5 0 0 1 2.5-2.5z"/></svg></button>
+      <button class="icon-btn" onclick="openModal('theme')"   title="Coats"         aria-label="Coats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8h2.1A4.3 4.3 0 0 0 21 10.7C21 6.4 16.9 3 12 3z"/><circle cx="7.5" cy="11.5" r="0.6" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7.5" r="0.6" fill="currentColor" stroke="none"/><circle cx="15" cy="8" r="0.6" fill="currentColor" stroke="none"/></svg></button>
+      <button class="icon-btn" id="mute-btn" onclick="toggleMute()" title="Mute sounds" aria-label="Mute sounds" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path class="snd-on" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="snd-off" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
+      <button class="icon-btn help-q" onclick="openModal('help')" title="How to play" aria-label="How to play">?</button>
+    </nav>
+  </header>
+
+  <main id="app">
+    <div id="setup-row">
+      <div id="diff-seg" role="tablist" aria-label="Difficulty">
+        <button id="btn-easy"    onclick="setDiffReq('easy')">Kitten</button>
+        <button id="btn-medium"  onclick="setDiffReq('medium')">Tabby</button>
+        <button id="btn-hard"    onclick="setDiffReq('hard')">Alley Cat</button>
+        <button id="btn-extreme" onclick="setDiffReq('extreme')">Lion</button>
+      </div>
+      <button id="new-btn" onclick="requestNewGame()">New</button>
+    </div>
+
+    <div id="info-bar">
+      <span id="mode-chip"></span>
+      <span id="progress"></span>
+      <div id="timer-box">
+        <span id="timer">0:00</span>
+        <button id="pause-btn" onclick="togglePause()" title="Pause (P)" aria-label="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1.5"/><rect x="14" y="4" width="5" height="16" rx="1.5"/></svg></button>
+      </div>
+    </div>
+
+    <div id="grid-wrap">
+      <div id="grid"></div>
+      <div id="pause-cover">
+        <div class="pc-title">Cat nap</div>
+        <button onclick="togglePause()">Wake up</button>
+      </div>
+      <div id="gen-overlay">
+        <div class="spinner"></div>
+        <div class="gen-title">Arranging the boxes…</div>
+        <div id="gen-count"></div>
+      </div>
+    </div>
+
+    <div id="toolbar">
+      <button class="tool-btn" id="undo-btn"  onclick="undo()"><span class="tool-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></span><span>Undo</span></button>
+      <button class="tool-btn" id="redo-btn"  onclick="redo()"><span class="tool-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></span><span>Redo</span></button>
+      <button class="tool-btn" id="hint-btn"  onclick="giveHint()"><span class="tool-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></span><span>Ask Grandma Cat</span></button>
+      <button class="tool-btn" id="clear-btn" onclick="clearBoard()"><span class="tool-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg></span><span>Clear</span></button>
+      <button class="tool-btn" id="share-btn" onclick="shareResult()" hidden><span class="tool-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/></svg></span><span>Share</span></button>
+    </div>
+
+    <p id="rules-line">Tap a cell: <b>paw</b> = no cat here → <b>cat</b> → clear · Drag to paw several cells</p>
+  </main>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <canvas id="confetti" style="position:fixed;inset:0;pointer-events:none;z-index:300"></canvas>
+
+  <!-- ── Modals ─────────────────────────────────────────────────────────── -->
+  <div id="modal-backdrop">
+
+    <div class="modal" id="modal-daily">
+      <div class="modal-head"><h2>Daily Nap</h2><button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button></div>
+      <div id="daily-date" class="panel-sub"></div>
+      <div id="daily-streak" class="panel-sub strong" style="margin-bottom:10px"></div>
+      <div id="daily-list" class="list-col"></div>
+    </div>
+
+    <div class="modal" id="modal-stats">
+      <div class="modal-head"><h2>Statistics</h2><button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button></div>
+      <div id="stats-tiles"></div>
+      <div id="stats-list" class="list-col"></div>
+    </div>
+
+    <div class="modal" id="modal-theme">
+      <div class="modal-head"><h2>Coats</h2><button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button></div>
+      <div id="theme-grid"></div>
+    </div>
+
+    <div class="modal" id="modal-library">
+      <div class="modal-head"><h2>Box library</h2><button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button></div>
+      <div class="panel-sub" style="text-align:left;margin-bottom:8px">Paste board JSON from the generator:</div>
+      <textarea id="lib-json" placeholder='{"puzzles":[...]}'></textarea>
+      <button class="primary-btn" onclick="loadLibraryJSON()">Load boards</button>
+      <div id="lib-list" class="list-col" style="margin-top:12px"></div>
+    </div>
+
+    <div class="modal" id="modal-help">
+      <div class="modal-head"><h2>How to play</h2><button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button></div>
+      <div class="help-sec">
+        <h3>Goal</h3>
+        <p>Seat exactly one <b>cat</b> in every <b>row</b>, every <b>column</b> and every colored <b>box</b>. Cats want their space: no two may touch, not even at a corner.</p>
+      </div>
+      <div class="help-sec">
+        <h3>Controls</h3>
+        <ul>
+          <li>Tap an empty cell once <span class="demo-cell"><svg aria-hidden="true"><use href="#paw"></use></svg></span> for a paw print: "no cat here".</li>
+          <li>Tap again <span class="demo-cell"><svg aria-hidden="true"><use href="#cat-calm"></use></svg></span> to seat a cat.</li>
+          <li>Tap a third time to clear the cell.</li>
+          <li><b>Drag</b> across cells to paw (or erase) many at once.</li>
+          <li>Faint paw prints appear around your cats by themselves: those cells are ruled out.</li>
+        </ul>
+      </div>
+      <div class="help-sec">
+        <h3>Grandma Cat</h3>
+        <p>If cats are clashing, she points them out. If not, she rules out one cell for you.</p>
+      </div>
+      <div class="help-sec">
+        <h3>Keyboard shortcuts</h3>
+        <div class="kbd-row"><span>Undo / Redo</span><span><kbd>Z</kbd> / <kbd>Y</kbd></span></div>
+        <div class="kbd-row"><span>Ask Grandma Cat</span><kbd>H</kbd></div>
+        <div class="kbd-row"><span>New game</span><kbd>N</kbd></div>
+        <div class="kbd-row"><span>Cat nap</span><kbd>P</kbd></div>
+        <div class="kbd-row"><span>Difficulty</span><span><kbd>1</kbd>–<kbd>4</kbd></span></div>
+        <div class="kbd-row"><span>Close dialog</span><kbd>Esc</kbd></div>
+      </div>
+      <button class="primary-btn" style="width:100%" onclick="closeModal()">Purr-fect</button>
+    </div>
+
+    <div class="modal center-card" id="modal-win">
+      <div class="win-medal"><svg aria-hidden="true"><use href="#cat-calm"/></svg></div>
+      <h2 id="win-title">Everyone's napping.</h2>
+      <div class="cc-sub" id="win-sub"></div>
+      <div class="cc-stats">
+        <div class="cc-stat"><div class="v" id="win-time">0:00</div><div class="l">Time</div></div>
+        <div class="cc-stat"><div class="v" id="win-best">—</div><div class="l">Best</div></div>
+        <div class="cc-stat"><div class="v" id="win-hints">0</div><div class="l">Hints</div></div>
+      </div>
+      <div class="win-tags" id="win-tags" style="display:none">
+        <span class="win-tag accent" id="win-newbest" style="display:none">New best</span>
+        <span class="win-tag" id="win-streak" style="display:none"></span>
+      </div>
+      <div class="cc-actions">
+        <button class="secondary-btn" id="win-share-btn" onclick="shareResult()" style="display:none">Share the nap</button>
+        <button class="primary-btn" onclick="closeModal(); newGame()">New game</button>
+        <button class="secondary-btn" onclick="closeModal()">View board</button>
+      </div>
+    </div>
+
+    <div class="modal center-card" id="modal-fail">
+      <div class="win-medal fail"></div>
+      <h2>No room for a cat</h2>
+      <div class="cc-sub">A row, column or box has<br>no free spot left.</div>
+      <div class="cc-actions">
+        <button class="primary-btn" onclick="failUndo()">Undo last move</button>
+        <button class="secondary-btn" onclick="failClear()">Clear board</button>
+      </div>
+    </div>
+
+    <div class="modal center-card" id="modal-confirm">
+      <h2 id="confirm-title" style="margin-top:6px">Are you sure?</h2>
+      <div class="cc-sub" id="confirm-msg"></div>
+      <div class="cc-actions">
+        <button class="primary-btn" id="confirm-yes">Yes</button>
+        <button class="secondary-btn" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  //  THEMES — edit these values to customise look & feel
+  //
+  //  css:    CSS custom property values applied to :root
+  //  palette: 15 region background colors
+  //  soundRate: optional playback-rate multiplier for the cat sounds (default 1)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const THEMES = {
+
+    // ── Classic (default) ─────────────────────────────────────────────────
+    ginger: {
+      label: 'Ginger tabby',
+      desc: 'Cream, cardboard and orange',
+      confetti: 'paw',
+      css: {
+        '--fur':           '#f4a259',
+        '--stripe':        '#c9702a',
+        '--ink':           '#5b3a29',
+        '--ear':           '#f2a7a0',
+        '--eye':           '#fff8c4',
+        '--bib':           'transparent',
+        '--mask':          'transparent',
+        '--patch':         'transparent',
+        '--patch-2':       'transparent',
+        '--page-bg':       '#fff8ee',
+        '--text-1':        '#3d2a1e',
+        '--text-2':        '#6b4f3d',
+        '--text-3':        '#8a6a55',
+        '--btn-bg':        '#fdeedd',
+        '--btn-hover':     '#f6e8d6',
+        '--btn-active':    '#efd9bf',
+        '--border':        '#e3cdb3',
+        '--border-strong': '#b39a86',
+        '--cell-border':   'rgba(91,58,41,0.14)',
+        '--region-border': 'rgba(91,58,41,0.62)',
+        '--star-fg':       '#c75f1a',
+        '--mark-fg':       'rgba(91,58,41,0.55)',
+        '--mark-auto-fg':  'rgba(91,58,41,0.42)',
+        '--wrong-fg':      '#c0392b',
+        '--win-fg':        '#1a7a4a',
+        '--err-fg':        '#c0392b',
+        '--overlay-bg':    'rgba(255,248,238,0.93)',
+      },
+      palette: [
+        '#F3D9B1', '#F7C6C7', '#CFE3C4', '#FBE7A1', '#C9DCF2',
+        '#E3D0F0', '#F9CFA8', '#E9E1D3', '#F2B8A2', '#BFE0D6',
+        '#E8C4DC', '#D8C3A5', '#E6D6A0', '#B5C9E8', '#D6E0A8',
+      ],
+    },
+
+    // ── Techno (dark / futuristic) ────────────────────────────────────────
+    tuxedo: {
+      label: 'Tuxedo',
+      desc: 'Black and white after dark',
+      confetti: 'paw',
+      css: {
+        '--fur':           '#2b2b33',
+        '--stripe':        '#3d3d48',
+        '--ink':           '#cfd8e8',
+        '--ear':           '#e6a0a8',
+        '--eye':           '#d8f060',
+        '--bib':           '#f4f4f0',
+        '--mask':          'transparent',
+        '--patch':         'transparent',
+        '--patch-2':       'transparent',
+        '--page-bg':       '#07090f',
+        '--text-1':        '#b8d8f8',
+        '--text-2':        '#5888aa',
+        '--text-3':        '#305870',
+        '--btn-bg':        '#0c1220',
+        '--btn-hover':     '#14203a',
+        '--btn-active':    '#1c2c50',
+        '--border':        '#182840',
+        '--border-strong': '#2860c8',
+        '--cell-border':   'rgba(28,120,220,0.14)',
+        '--region-border': 'rgba(38,148,255,0.62)',
+        '--star-fg':       '#30c8ff',
+        '--mark-fg':       'rgba(48,180,255,0.55)',
+        '--mark-auto-fg':  'rgba(48,180,255,0.30)',
+        '--wrong-fg':      '#ff3a5a',
+        '--win-fg':        '#00ffaa',
+        '--err-fg':        '#ff3a5a',
+        '--overlay-bg':    'rgba(7,9,15,0.93)',
+        '--radius-lg'     : '8px',
+        '--radius-md'     : '5px',
+        '--radius-sm'     : '3px',
+        '--grid-radius'   : '0px',
+        '--grid-border-w' : '1px',
+        '--grid-glow'     : '0 0 0 1px rgba(40,140,255,0.25), 0 0 34px rgba(30,120,255,0.30)',
+        '--region-w'      : '2px',
+        '--star-glow'     : '0 0 10px rgba(48,200,255,0.85)',
+        '--speed-ui'      : '0.04s',
+        '--page-texture'  : 'linear-gradient(rgba(40,120,220,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(40,120,220,0.07) 1px, transparent 1px)',
+        '--page-texture-size' : '26px 26px',
+      },
+      palette: [
+        '#0c2448', '#0c3830', '#48102c', '#483418', '#182c10',
+        '#1c0c60', '#482018', '#242428', '#383800', '#0c2238',
+        '#0c3220', '#3c0c20', '#1e0c48', '#183400', '#381618',
+      ],
+    },
+
+    // ── Nature (calm / forest / waterfall) ───────────────────────────────
+    calico: {
+      label: 'Calico',
+      desc: 'Earthy, patched and sunny',
+      confetti: 'paw',
+      css: {
+        '--fur':           '#fbf6ee',
+        '--stripe':        '#e0d6c4',
+        '--ink':           '#5b4636',
+        '--ear':           '#f2a7a0',
+        '--eye':           '#ffe27a',
+        '--bib':           'transparent',
+        '--mask':          'transparent',
+        '--patch':         '#e8893a',
+        '--patch-2':       '#2e2a28',
+        '--page-bg':       '#f0f5e8',
+        '--text-1':        '#2a3a18',
+        '--text-2':        '#4a6828',
+        '--text-3':        '#7a9850',
+        '--btn-bg':        '#fafef4',
+        '--btn-hover':     '#e8f2d8',
+        '--btn-active':    '#d8eac8',
+        '--border':        '#c0d49a',
+        '--border-strong': '#5a8038',
+        '--cell-border':   'rgba(60,100,28,0.12)',
+        '--region-border': 'rgba(60,100,28,0.52)',
+        '--star-fg':       '#2a5a10',
+        '--mark-fg':       'rgba(60,100,28,0.50)',
+        '--mark-auto-fg':  'rgba(60,100,28,0.32)',
+        '--wrong-fg':      '#8a2010',
+        '--win-fg':        '#1a5020',
+        '--err-fg':        '#8a2010',
+        '--overlay-bg':    'rgba(240,245,232,0.92)',
+        '--radius-lg'     : '24px',
+        '--radius-md'     : '16px',
+        '--radius-sm'     : '12px',
+        '--grid-radius'   : '18px',
+        '--grid-glow'     : '0 12px 34px rgba(60,100,28,0.16)',
+        '--cell-style'    : 'dotted',
+        '--speed-ui'      : '0.25s',
+        '--page-texture'  : 'radial-gradient(rgba(90,128,56,0.06) 1px, transparent 1.4px)',
+        '--page-texture-size' : '22px 22px',
+      },
+      palette: [
+        '#c8e8a0', '#a0d8a8', '#e0d890', '#f0e4a8', '#b8eccA',
+        '#c4bce8', '#e8c8a0', '#d8d4c0', '#e8e8a0', '#98d0e8',
+        '#a0dccc', '#ecc0cc', '#c8b8e8', '#c0e490', '#f0c8b8',
+      ],
+    },
+
+    // ── Midnight (near-black indigo, gold stars) ──────────────────────────
+    black: {
+      label: 'Black cat',
+      desc: 'The night shift',
+      confetti: 'paw',
+      css: {
+        '--fur':           '#1e1e26',
+        '--stripe':        '#2e2e3a',
+        '--ink':           '#9aa0c8',
+        '--ear':           '#c88aa0',
+        '--eye':           '#f0d040',
+        '--bib':           'transparent',
+        '--mask':          'transparent',
+        '--patch':         'transparent',
+        '--patch-2':       'transparent',
+        '--page-bg':       '#0b0b14',
+        '--text-1':        '#e8e4d8',
+        '--text-2':        '#a8a294',
+        '--text-3':        '#6a6558',
+        '--btn-bg':        '#15151f',
+        '--btn-hover':     '#1e1e2c',
+        '--btn-active':    '#282838',
+        '--border':        '#2a2a3a',
+        '--border-strong': '#8a7a48',
+        '--cell-border':   'rgba(240,200,96,0.10)',
+        '--region-border': 'rgba(240,208,128,0.55)',
+        '--star-fg':       '#f0c860',
+        '--mark-fg':       'rgba(232,228,216,0.50)',
+        '--mark-auto-fg':  'rgba(232,228,216,0.30)',
+        '--wrong-fg':      '#ff5a4a',
+        '--win-fg':        '#78d888',
+        '--err-fg':        '#ff5a4a',
+        '--overlay-bg':    'rgba(11,11,20,0.93)',
+        '--radius-lg'     : '14px',
+        '--radius-md'     : '9px',
+        '--radius-sm'     : '7px',
+        '--grid-radius'   : '4px',
+        '--grid-border-w' : '1px',
+        '--grid-glow'     : '0 0 0 1px rgba(240,200,96,0.20), 0 20px 60px rgba(0,0,0,0.65)',
+        '--region-w'      : '1.5px',
+        '--star-glow'     : '0 0 12px rgba(240,200,96,0.70)',
+        '--speed-ui'      : '0.2s',
+        '--page-texture'  : 'radial-gradient(circle at 20% 30%, rgba(232,228,216,0.14) 1px, transparent 1.8px), radial-gradient(circle at 70% 60%, rgba(232,228,216,0.08) 1px, transparent 1.6px), radial-gradient(circle at 45% 85%, rgba(232,228,216,0.10) 1px, transparent 1.7px)',
+        '--page-texture-size' : '260px 260px, 190px 190px, 320px 320px',
+      },
+      palette: [
+        '#1c2440', '#2c1e3e', '#16323a', '#3a2820', '#20362a',
+        '#2e2a52', '#40222e', '#28303c', '#3c3418', '#1a2a4e',
+        '#243e30', '#421e40', '#323046', '#2e3c1e', '#3e2c34',
+      ],
+    },
+
+    // ── Sakura (warm pink dusk, petal stars) ──────────────────────────────
+    siamese: {
+      label: 'Siamese',
+      desc: 'Warm cream, dark points',
+      confetti: 'paw',
+      css: {
+        '--fur':           '#f3e6cf',
+        '--stripe':        '#e2cfae',
+        '--ink':           '#4a3426',
+        '--ear':           '#e8a8a0',
+        '--eye':           '#7ec8f0',
+        '--bib':           'transparent',
+        '--mask':          '#5a4030',
+        '--patch':         'transparent',
+        '--patch-2':       'transparent',
+        '--page-bg':       '#fdf3f2',
+        '--text-1':        '#5a3040',
+        '--text-2':        '#8a5868',
+        '--text-3':        '#b48a96',
+        '--btn-bg':        '#fffafa',
+        '--btn-hover':     '#fae8ea',
+        '--btn-active':    '#f4d8dd',
+        '--border':        '#e8c4cc',
+        '--border-strong': '#c87890',
+        '--cell-border':   'rgba(150,60,90,0.10)',
+        '--region-border': 'rgba(150,60,90,0.50)',
+        '--star-fg':       '#d0507a',
+        '--mark-fg':       'rgba(120,50,75,0.50)',
+        '--mark-auto-fg':  'rgba(120,50,75,0.32)',
+        '--wrong-fg':      '#b02818',
+        '--win-fg':        '#3a7a48',
+        '--err-fg':        '#b02818',
+        '--overlay-bg':    'rgba(253,243,242,0.92)',
+        '--radius-lg'     : '26px',
+        '--radius-md'     : '17px',
+        '--radius-sm'     : '13px',
+        '--grid-radius'   : '20px',
+        '--grid-glow'     : '0 12px 36px rgba(208,80,122,0.14)',
+        '--region-w'      : '2px',
+        '--star-glow'     : '0 2px 8px rgba(208,80,122,0.35)',
+        '--speed-ui'      : '0.22s',
+        '--page-texture'  : 'radial-gradient(circle at 12% 6%, rgba(248,190,205,0.55), transparent 40%), radial-gradient(circle at 90% 94%, rgba(252,224,216,0.60), transparent 42%)',
+      },
+      palette: [
+        '#f8ccd4', '#fce4d8', '#e8d4ec', '#d4e8d8', '#f8e0e8',
+        '#e0d0c0', '#ecdcf4', '#c8e0d0', '#f4d8c8', '#dcd8ec',
+        '#f0c8cc', '#d8ecdc', '#ecd0dc', '#e4e0c8', '#f0dce4',
+      ],
+    },
+
+    // ── Ocean (deep-sea blues, light aqua page) ───────────────────────────
+    blue: {
+      label: 'Russian Blue',
+      desc: 'Cool grey-blue calm',
+      confetti: 'paw',
+      css: {
+        '--fur':           '#8a98a8',
+        '--stripe':        '#6e7c8c',
+        '--ink':           '#34404e',
+        '--ear':           '#d8a8b0',
+        '--eye':           '#a8e060',
+        '--bib':           'transparent',
+        '--mask':          'transparent',
+        '--patch':         'transparent',
+        '--patch-2':       'transparent',
+        '--page-bg':       '#eef6f8',
+        '--text-1':        '#0c3248',
+        '--text-2':        '#2a5a72',
+        '--text-3':        '#6a92a4',
+        '--btn-bg':        '#fbfeff',
+        '--btn-hover':     '#e2f0f4',
+        '--btn-active':    '#d0e6ec',
+        '--border':        '#b8d8e2',
+        '--border-strong': '#3080a0',
+        '--cell-border':   'rgba(10,90,128,0.10)',
+        '--region-border': 'rgba(10,90,128,0.52)',
+        '--star-fg':       '#0a5a80',
+        '--mark-fg':       'rgba(10,70,100,0.50)',
+        '--mark-auto-fg':  'rgba(10,70,100,0.30)',
+        '--wrong-fg':      '#c03028',
+        '--win-fg':        '#0a7a58',
+        '--err-fg':        '#c03028',
+        '--overlay-bg':    'rgba(238,246,248,0.92)',
+        '--radius-lg'     : '22px',
+        '--radius-md'     : '14px',
+        '--radius-sm'     : '11px',
+        '--grid-radius'   : '14px',
+        '--grid-glow'     : '0 16px 44px rgba(10,90,128,0.22)',
+        '--star-glow'     : '0 0 9px rgba(10,120,170,0.40)',
+        '--speed-ui'      : '0.25s',
+        '--page-texture'  : 'repeating-linear-gradient(180deg, transparent 0 30px, rgba(10,90,128,0.04) 30px 31px)',
+      },
+      palette: [
+        '#a8dce8', '#88ccc0', '#c0e4f4', '#a0c8e8', '#b0e8d8',
+        '#d8e8c8', '#98c0d8', '#c8ecec', '#e0e0b8', '#88b8d0',
+        '#a8e0c8', '#d0d8e8', '#b8d0a8', '#90d4dc', '#e0d4c0',
+      ],
+    },
+
+    // ── Arcade (CRT dark + neon, chiptune) ────────────────────────────────
+    tortie: {
+      label: 'Tortoiseshell',
+      desc: 'Dark, with orange patches',
+      confetti: 'paw',
+      css: {
+        '--fur':           '#3a2a24',
+        '--stripe':        '#2a1c18',
+        '--ink':           '#e0b890',
+        '--ear':           '#e8a090',
+        '--eye':           '#ffd24a',
+        '--bib':           'transparent',
+        '--mask':          'transparent',
+        '--patch':         '#e07a2a',
+        '--patch-2':       '#8a4a22',
+        '--page-bg':       '#0a0014',
+        '--text-1':        '#ffe14a',
+        '--text-2':        '#c898e8',
+        '--text-3':        '#7858a0',
+        '--btn-bg':        '#180830',
+        '--btn-hover':     '#241048',
+        '--btn-active':    '#301860',
+        '--border':        '#382060',
+        '--border-strong': '#b040e0',
+        '--cell-border':   'rgba(200,80,255,0.14)',
+        '--region-border': 'rgba(255,80,180,0.62)',
+        '--star-fg':       '#ff2a6a',
+        '--mark-fg':       'rgba(255,225,74,0.55)',
+        '--mark-auto-fg':  'rgba(255,225,74,0.30)',
+        '--wrong-fg':      '#ff4020',
+        '--win-fg':        '#40ff90',
+        '--err-fg':        '#ff4020',
+        '--overlay-bg':    'rgba(10,0,20,0.93)',
+        '--radius-lg'     : '0px',
+        '--radius-md'     : '0px',
+        '--radius-sm'     : '0px',
+        '--grid-radius'   : '0px',
+        '--grid-border-w' : '3px',
+        '--grid-glow'     : '0 0 0 1px rgba(176,64,224,0.45), 0 0 34px rgba(255,42,106,0.30)',
+        '--region-w'      : '3px',
+        '--star-glow'     : '0 0 9px rgba(255,80,180,0.90)',
+        '--speed-ui'      : '0s',
+        '--screen-fx'     : 'radial-gradient(ellipse at center, transparent 58%, rgba(0,0,0,0.32)), repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0 1px, transparent 1px 3px)',
+      },
+      palette: [
+        '#301848', '#0c3050', '#401830', '#204018', '#483014',
+        '#181c58', '#38103c', '#104038', '#403c10', '#28104c',
+        '#0c2840', '#44183c', '#163c28', '#3c2418', '#241850',
+      ],
+    },
+
+  }; // end THEMES
+
+  // ── Theme state ───────────────────────────────────────────────────────────
+  const DEFAULT_COAT = 'ginger';
+  let currentTheme = THEMES[localStorage.getItem('coldshoulder_theme')] ? localStorage.getItem('coldshoulder_theme') : DEFAULT_COAT;
+
+  // Structural defaults — every theme overrides only what it changes,
+  // merging over this base so switching themes fully resets the look.
+  const THEME_BASE = {
+    '--radius-lg': '18px', '--radius-md': '12px', '--radius-sm': '9px',
+    '--grid-radius': '6px', '--grid-border-w': '2px', '--grid-glow': '0 1px 3px rgba(0,0,0,0.07)',
+    '--region-w': '2.5px', '--region-style': 'solid', '--cell-style': 'solid',
+    '--star-glow': 'none', '--speed-ui': '0.12s',
+    '--ui-font': "'Fredoka', system-ui, sans-serif",
+    '--page-texture': 'none', '--page-texture-size': 'auto', '--screen-fx': 'none',
+  };
+
+  function applyTheme(name) {
+    if (!THEMES[name]) return;
+    currentTheme = name;
+    const root = document.documentElement;
+    Object.entries(Object.assign({}, THEME_BASE, THEMES[name].css))
+      .forEach(([k, v]) => root.style.setProperty(k, v));
+    document.body.dataset.theme = name;
+    localStorage.setItem('coldshoulder_theme', name);
+    document.querySelectorAll('.theme-card').forEach(c =>
+      c.classList.toggle('active', c.dataset.theme === name));
+    if (regions && regions.length) renderGrid();
+  }
+
+  function refreshThemeModal() {
+    const grid = document.getElementById('theme-grid');
+    grid.innerHTML = '';
+    Object.entries(THEMES).forEach(([key, t]) => {
+      const card = document.createElement('button');
+      card.className = 'theme-card' + (key === currentTheme ? ' active' : '');
+      card.dataset.theme = key;
+      card.style.background = t.css['--btn-bg'];
+      card.style.color = t.css['--text-1'];
+      ['--fur','--stripe','--ink','--ear','--eye','--bib','--mask','--patch','--patch-2']
+        .forEach(v => card.style.setProperty(v, t.css[v]));
+      card.style.borderRadius = t.css['--radius-md'] || '12px';
+      card.innerHTML =
+        '<span class="tc-name">' + t.label +
+        '<svg class="tc-cat" viewBox="0 0 40 40" width="34" height="34" aria-hidden="true"><use href="#cat-calm"/></svg></span>' +
+        '<span class="tc-desc">' + (t.desc || '') + '</span>' +
+        '<span class="tc-dots">' +
+        t.palette.slice(0, 5).map(c => '<span class="tc-dot" style="background:' + c + '"></span>').join('') +
+        '</span>';
+      card.onclick = () => applyTheme(key);
+      grid.appendChild(card);
+    });
+  }
+
+  // ── Game state ────────────────────────────────────────────────────────────
+  let diff = 'easy';
+  let N = 8;
+  let currentSeed = null;   // seed string of the current puzzle
+  let dailyKind = null;     // null | 'featured' | 'easy' | 'medium' | 'hard' | 'extreme'
+  let regions = [];
+  let solution = [];
+  let board = [];
+  let won = false;
+  let timerInt = null;
+  let seconds = 0;
+  let hintUsed = 0;
+  let genId = 0;
+  let lastPlacedStar = null;
+  let history = [];
+  let future = [];
+  let paused = false;
+
+  // ── Library state ─────────────────────────────────────────────────────────
+  let libraryPuzzles = [];
+  let currentLibPuzzleId = null;
+
+  // ── Drag state ────────────────────────────────────────────────────────────
+  let isDragging = false;
+  let dragMoved = false;
+  let dragMarkMode = null;
+  let dragStartCell = null;
+  let dragHistoryPushed = false;
+
+  // ── Audio ─────────────────────────────────────────────────────────────────
+  // Recorded CC0 clips (assets/sounds/CREDITS.md), decoded once on the first gesture.
+  const SOUND_FILES = {
+    place:  'assets/sounds/place.mp3',
+    mark:   'assets/sounds/mark.mp3',
+    remove: 'assets/sounds/remove.mp3',
+    undo:   'assets/sounds/undo.mp3',
+    redo:   'assets/sounds/redo.mp3',
+    hint:   'assets/sounds/hint.mp3',
+    clash:  'assets/sounds/clash.mp3',
+    win:    'assets/sounds/win.mp3',
+    fail:   'assets/sounds/fail.mp3',
+    sleep:  'assets/sounds/sleep.mp3', // looped purr after a win (startSleepLoop), not played via playSound
+  };
+  const MAX_VOICES = 4;
+  const MUTE_KEY = 'coldshoulder_muted';
+  let _audioCtx = null;
+  let _soundsPromise = null;
+  const _buffers = {};
+  const _voices = [];
+  function audioCtx() {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return _audioCtx;
+  }
+  function loadSounds() {
+    if (_soundsPromise) return _soundsPromise;
+    _soundsPromise = (async () => {
+      let ctx;
+      try { ctx = audioCtx(); } catch (e) { console.warn('sound: no audio', e); return; }
+      await Promise.all(Object.entries(SOUND_FILES).map(async ([name, url]) => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          _buffers[name] = await ctx.decodeAudioData(await res.arrayBuffer());
+        } catch (e) { console.warn('sound: skipped ' + name, e); }
+      }));
+    })();
+    return _soundsPromise;
+  }
+  function onFirstGesture() {
+    window.removeEventListener('pointerdown', onFirstGesture, true);
+    window.removeEventListener('keydown', onFirstGesture, true);
+    try { audioCtx().resume().catch(() => {}); } catch (e) {}
+    loadSounds();
+  }
+  window.addEventListener('pointerdown', onFirstGesture, true);
+  window.addEventListener('keydown', onFirstGesture, true);
+
+  function isMuted() { try { return localStorage.getItem(MUTE_KEY) === '1'; } catch (e) { return false; } }
+  function updateMuteButton() {
+    const b = document.getElementById('mute-btn');
+    if (!b) return;
+    const m = isMuted();
+    b.setAttribute('aria-label', m ? 'Unmute sounds' : 'Mute sounds');
+    b.title = m ? 'Unmute sounds' : 'Mute sounds';
+    b.setAttribute('aria-pressed', m ? 'true' : 'false');
+    b.classList.toggle('muted', m);
+  }
+  function toggleMute() {
+    const m = !isMuted();
+    try { localStorage.setItem(MUTE_KEY, m ? '1' : '0'); } catch (e) {}
+    if (m) { while (_voices.length) { try { _voices.pop().stop(); } catch (e) {} } stopSleepLoop(); }
+    updateMuteButton();
+  }
+  function activeVoices() { return _voices.length; }
+  function playSound(type) {
+    try {
+      const buf = _buffers[type];
+      if (!buf || isMuted() || !_audioCtx) return;
+      const ctx = _audioCtx;
+      if (ctx.state !== 'running') ctx.resume().catch(() => {});
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.playbackRate.value = (THEMES[currentTheme] || THEMES[DEFAULT_COAT]).soundRate || 1;
+      src.connect(ctx.destination);
+      src.onended = () => { const i = _voices.indexOf(src); if (i >= 0) _voices.splice(i, 1); };
+      _voices.push(src);
+      while (_voices.length > MAX_VOICES) {
+        const old = _voices.shift();
+        old.onended = null;
+        try { old.stop(); } catch (e) {}
+      }
+      src.start();
+    } catch (e) { console.warn('sound: play failed', e); }
+  }
+
+  // ── Sleep loop: quiet purr after a win ────────────────────────────────────
+  // Not a voice (own gain, outside _voices / MAX_VOICES). MP3 decoding pads both ends of the buffer, so
+  // loopStart/loopEnd are set to the first/last samples above a small threshold; the clip's own seam is crossfaded.
+  let SLEEP_MAX_MS = 90000;
+  let SLEEP_DELAY_MS = null; // null = wait for the win clip's duration
+  const SLEEP_GAIN = 0.5, SLEEP_FADE_IN_S = 0.8, SLEEP_FADE_OUT_MS = 600;
+  let _sleep = null;          // { src, gain, maxTimer, releaseTimer } while a loop exists
+  let _sleepDelayTimer = null;
+  let _sleepStarted = 0;      // count of loop nodes ever created (test hook)
+  function sleepLoopActive() { return !!_sleep; }
+  function sleepBounds(buf) {
+    const TH = 0.002, n = buf.length;
+    let a = n, b = 0;
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < n; i++) if (Math.abs(d[i]) > TH) { if (i < a) a = i; break; }
+      for (let i = n - 1; i >= 0; i--) if (Math.abs(d[i]) > TH) { if (i > b) b = i; break; }
+    }
+    if (b <= a) return [0, buf.duration];
+    return [a / buf.sampleRate, (b + 1) / buf.sampleRate];
+  }
+  function startSleepLoop() {
+    try {
+      const buf = _buffers.sleep;
+      if (_sleep || !buf || isMuted() || !_audioCtx) return;
+      const ctx = _audioCtx;
+      if (ctx.state !== 'running') ctx.resume().catch(() => {});
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const [ls, le] = sleepBounds(buf);
+      src.loopStart = ls; src.loopEnd = le;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(SLEEP_GAIN, ctx.currentTime + SLEEP_FADE_IN_S);
+      src.connect(gain); gain.connect(ctx.destination);
+      src.start(0, ls);
+      _sleepStarted++;
+      _sleep = { src, gain, maxTimer: setTimeout(() => stopSleepLoop(), SLEEP_MAX_MS), releaseTimer: null };
+    } catch (e) { console.warn('sound: sleep loop failed', e); _sleep = null; }
+  }
+  function stopSleepLoop(fadeMs) {
+    clearTimeout(_sleepDelayTimer); _sleepDelayTimer = null;
+    const s = _sleep;
+    if (!s || s.releaseTimer) return;
+    clearTimeout(s.maxTimer);
+    const ms = fadeMs == null ? SLEEP_FADE_OUT_MS : fadeMs;
+    try {
+      const t = _audioCtx.currentTime;
+      s.gain.gain.cancelScheduledValues(t);
+      s.gain.gain.setValueAtTime(s.gain.gain.value, t);
+      s.gain.gain.linearRampToValueAtTime(0, t + ms / 1000);
+    } catch (e) {}
+    s.releaseTimer = setTimeout(() => {
+      try { s.src.stop(); s.src.disconnect(); s.gain.disconnect(); } catch (e) {}
+      if (_sleep === s) _sleep = null;
+    }, ms + 50);
+  }
+  function scheduleSleepLoop() {
+    clearTimeout(_sleepDelayTimer);
+    if (isMuted() || !_buffers.sleep || !_audioCtx) return;
+    let ms = SLEEP_DELAY_MS;
+    if (ms == null) {
+      const w = _buffers.win;
+      const rate = (THEMES[currentTheme] || THEMES[DEFAULT_COAT]).soundRate || 1;
+      ms = w ? (w.duration / rate) * 1000 : 0;
+    }
+    _sleepDelayTimer = setTimeout(() => { _sleepDelayTimer = null; startSleepLoop(); }, ms);
+  }
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopSleepLoop(); });
+
+  // ── Modal system ──────────────────────────────────────────────────────────
+  let activeModal = null;
+  const MODAL_REFRESH = {
+    daily:   () => refreshDailyPanel(),
+    stats:   () => refreshStatsPanel(),
+    theme:   () => refreshThemeModal(),
+    library: () => refreshLibList(),
+  };
+  function openModal(name) {
+    const backdrop = document.getElementById('modal-backdrop');
+    document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
+    const modal = document.getElementById('modal-' + name);
+    if (!modal) return;
+    if (MODAL_REFRESH[name]) MODAL_REFRESH[name]();
+    modal.classList.add('open');
+    backdrop.classList.add('open');
+    activeModal = name;
+  }
+  function closeModal() {
+    document.getElementById('modal-backdrop').classList.remove('open');
+    document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
+    activeModal = null;
+  }
+  document.getElementById('modal-backdrop').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-backdrop') closeModal();
+  });
+
+  function confirmDialog(title, msg, yesLabel, cb) {
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-msg').textContent = msg;
+    const yes = document.getElementById('confirm-yes');
+    yes.textContent = yesLabel;
+    yes.onclick = () => { closeModal(); cb(); };
+    openModal('confirm');
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+  let toastTimer = null, lastToastMsg = '', lastToastAt = 0;
+  function showToast(msg, cls) {
+    const now = Date.now();
+    if (msg === lastToastMsg && now - lastToastAt < 1800) return;
+    lastToastMsg = msg; lastToastAt = now;
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = cls || '';
+    // retrigger transition
+    requestAnimationFrame(() => t.classList.add('show'));
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+
+  // ── Difficulty & game start ───────────────────────────────────────────────
+  function gameDirty() { return history.length > 0 && !won; }
+
+  function setDiffReq(d) {
+    if (d === diff && !dailyKind && !currentLibPuzzleId) return;
+    if (gameDirty()) {
+      confirmDialog('Switch difficulty?', 'The cats will scatter. Progress on this board is lost.', 'Switch', () => setDiff(d));
+    } else {
+      setDiff(d);
+    }
+  }
+  function setDiff(d) {
+    diff = d;
+    updateSeg();
+    newGame();
+  }
+  function updateSeg() {
+    ['easy','medium','hard','extreme'].forEach(x =>
+      document.getElementById('btn-'+x).classList.toggle('active', x === diff));
+  }
+  function requestNewGame() {
+    if (gameDirty()) {
+      confirmDialog('New game?', 'The cats will scatter. Progress on this board is lost.', 'New game', () => newGame());
+    } else {
+      newGame();
+    }
+  }
+
+  function modeLabel() {
+    const d = DIFF_LABEL[diff];
+    if (currentLibPuzzleId) return 'Board #' + currentLibPuzzleId + ' · ' + d;
+    if (dailyKind) {
+      return (dailyKind === 'featured' ? 'Daily Nap' : 'Daily') + ' ' + utcDateStr() + ' · ' + d;
+    }
+    return d;
+  }
+
+  function updateModeChip() {
+    document.getElementById('mode-chip').textContent = modeLabel() + ' · ' + N + '×' + N;
+  }
+
+  function updateProgress() {
+    let cats = 0;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (board[r][c] === 1) cats++;
+    const el = document.getElementById('progress');
+    el.textContent = cats + '/' + N + ' cats';
+    el.classList.toggle('done', won);
+  }
+
+  // Chunked candidate loop: keeps UI responsive; deterministic for a given seed.
+  async function generateWithUI(seedStr, difficulty, myId) {
+    const max = DIFF[difficulty].maxCandidates;
+    let best = null, bestScore = Infinity;
+    for (let i = 0; i < max; i++) {
+      if (myId !== genId) return null;
+      if (i % 2 === 0) { showGenOverlay(i + 1); await new Promise(r => setTimeout(r, 0)); }
+      const cand = generateCandidate(seedStr, i, difficulty);
+      if (!cand) continue;
+      if (gradeFits(cand.grade, difficulty)) { hideGenOverlay(); return cand; }
+      const s = fitScore(cand.grade, difficulty);
+      if (s < bestScore) { bestScore = s; best = cand; }
+    }
+    hideGenOverlay();
+    return best;
+  }
+
+  async function newGame(seedStr, kind) {
+    stopSleepLoop();
+    const myId = ++genId;
+    currentLibPuzzleId = null;
+    dailyKind = kind || null;
+    clearInterval(timerInt);
+    seconds = 0; hintUsed = 0; won = false;
+    setPaused(false);
+    updateTimer();
+    hideShareButton();
+    closeWinIfOpen();
+    currentSeed = seedStr ||
+      ('coldshoulder-rand-' + Date.now() + '-' + Math.floor(Math.random() * 1e9));
+    const puzzle = await generateWithUI(currentSeed, diff, myId);
+    if (myId !== genId) return;
+    if (!puzzle) {
+      showToast('The boxes would not fit. Try again.', 'err');
+      return;
+    }
+    N = puzzle.n;
+    regions = puzzle.regions;
+    solution = puzzle.solution;
+    board = Array.from({length: N}, () => Array(N).fill(0));
+    bubbleCell = null;
+    history = []; future = [];
+    updateModeChip();
+    renderGrid(true);
+    document.getElementById('pause-btn').disabled = false;
+    timerInt = setInterval(() => { if (!won && !paused && !document.hidden) { seconds++; updateTimer(); } }, 1000);
+  }
+
+  function closeWinIfOpen() {
+    if (activeModal === 'win' || activeModal === 'fail') closeModal();
+  }
+
+  function fmtClock(s) { return Math.floor(s/60) + ':' + (s%60 < 10 ? '0' : '') + (s%60); }
+  function updateTimer() { document.getElementById('timer').textContent = fmtClock(seconds); }
+
+  // ── Pause ─────────────────────────────────────────────────────────────────
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1.5"/><rect x="14" y="4" width="5" height="16" rx="1.5"/></svg>';
+  const ICON_PLAY  = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72a1 1 0 0 0 1.52.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14z"/></svg>';
+  function setPaused(p) {
+    paused = p;
+    document.getElementById('grid-wrap').classList.toggle('paused', p);
+    const btn = document.getElementById('pause-btn');
+    btn.innerHTML = p ? ICON_PLAY : ICON_PAUSE;
+    btn.title = p ? 'Wake up (P)' : 'Cat nap (P)';
+  }
+  function togglePause() {
+    if (won || !regions.length) return;
+    setPaused(!paused);
+  }
+
+  function showGenOverlay(attempt) {
+    document.getElementById('grid-wrap').classList.add('generating');
+    document.getElementById('gen-count').textContent = 'Finding boxes… ' + attempt;
+  }
+  function hideGenOverlay() {
+    document.getElementById('grid-wrap').classList.remove('generating');
+  }
+
+  // ── Engine (generated from src/engine.js — do not edit here; run `node build.js`)
+// ==ENGINE-START==
+// Cold Shoulder engine — seeded, solution-first, unique-solution generator + logic grader.
+
+function xmur3(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return function () {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  };
+}
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function makeRng(seedStr) { return mulberry32(xmur3(String(seedStr))()); }
+function rngInt(rng, n) { return Math.floor(rng() * n); }
+function rngShuffle(rng, a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = rngInt(rng, i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function placeStars(n, rng) {
+  const sol = Array(n).fill(-1);
+  const usedCols = Array(n).fill(false);
+  function bt(row) {
+    if (row === n) return true;
+    const cols = rngShuffle(rng, Array.from({ length: n }, (_, i) => i));
+    for (const col of cols) {
+      if (usedCols[col]) continue;
+      if (row > 0 && Math.abs(sol[row - 1] - col) <= 1) continue;
+      sol[row] = col; usedCols[col] = true;
+      if (bt(row + 1)) return true;
+      sol[row] = -1; usedCols[col] = false;
+    }
+    return false;
+  }
+  return bt(0) ? sol : null;
+}
+const DIRS = [[-1, 0], [0, 1], [1, 0], [0, -1]]; // up right down left (rotation order)
+
+const DIFF = {
+  easy:    { n: 8,  minSize: 1, maxSize: 11, pins: 2, maxRounds: 120, maxCandidates: 40, weights: { blob: 0.70, elbow: 0.30, snake: 0,    spiral: 0    } },
+  medium:  { n: 8,  minSize: 2, maxSize: 12, pins: 2, maxRounds: 120, maxCandidates: 40, weights: { blob: 0.40, elbow: 0.30, snake: 0.20, spiral: 0.10 } },
+  hard:    { n: 10, minSize: 3, maxSize: 15, pins: 4, maxRounds: 160, maxCandidates: 30, weights: { blob: 0.20, elbow: 0.25, snake: 0.35, spiral: 0.20 } },
+  // Extreme stays 10×10: 12×12 one-star puzzles can't be made reliably unique
+  // without so many pinned regions that the logic turns shallow. Depth (t3 ≥ 4)
+  // is what makes extreme extreme, not board size.
+  extreme: { n: 10, minSize: 3, maxSize: 15, pins: 4, maxRounds: 160, maxCandidates: 30, weights: { blob: 0.15, elbow: 0.20, snake: 0.40, spiral: 0.25 } },
+};
+
+function pickPersonality(rng, weights) {
+  const entries = Object.entries(weights);
+  const x = rng();
+  let acc = 0;
+  for (const [k, w] of entries) { acc += w; if (x < acc) return k; }
+  return entries[0][0];
+}
+
+function partitionSizes(n, rng, minSize, maxSize) {
+  const sizes = Array(n).fill(n); // mean = n
+  for (let t = 0; t < 3 * n; t++) {
+    const a = rngInt(rng, n), b = rngInt(rng, n);
+    if (a !== b && sizes[a] > minSize && sizes[b] < maxSize) { sizes[a]--; sizes[b]++; }
+  }
+  return sizes;
+}
+
+function regionCellsOf(n, reg) {
+  const cells = Array.from({ length: n }, () => []);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) cells[reg[r][c]].push([r, c]);
+  return cells;
+}
+
+function growRegions(n, stars, rng, cfg) {
+  const reg = Array.from({ length: n }, () => Array(n).fill(-1));
+  const sizes = partitionSizes(n, rng, cfg.minSize, cfg.maxSize);
+  const gs = [];
+  for (let i = 0; i < n; i++) {
+    reg[i][stars[i]] = i;
+    gs.push({
+      id: i, cells: [[i, stars[i]]], target: sizes[i],
+      personality: pickPersonality(rng, cfg.weights),
+      lastDir: DIRS[rngInt(rng, 4)], step: 0,
+      axis: rngInt(rng, 2),
+      rotStart: rngInt(rng, 4), spin: rng() < 0.5 ? 1 : -1,
+    });
+  }
+  let unassigned = n * n - n;
+
+  function frontierOf(g) {
+    const seen = new Set(), out = [];
+    for (const [r, c] of g.cells) {
+      for (const [dr, dc] of DIRS) {
+        const nr = r + dr, nc = c + dc, k = nr * n + nc;
+        if (nr < 0 || nr >= n || nc < 0 || nc >= n || reg[nr][nc] !== -1 || seen.has(k)) continue;
+        seen.add(k); out.push({ r: nr, c: nc, dir: [dr, dc] });
+      }
+    }
+    return out;
+  }
+
+  function score(g, cand) {
+    let s = rng() * 0.9;
+    if (g.personality === 'blob') {
+      let cr = 0, cc = 0;
+      for (const [r, c] of g.cells) { cr += r; cc += c; }
+      cr /= g.cells.length; cc /= g.cells.length;
+      s += 3 - (Math.abs(cand.r - cr) + Math.abs(cand.c - cc)) * 0.8;
+    } else if (g.personality === 'snake') {
+      if (cand.dir[0] === g.lastDir[0] && cand.dir[1] === g.lastDir[1]) s += 2.2;
+    } else if (g.personality === 'elbow') {
+      const wantAxis = g.step < Math.max(2, g.target >> 1) ? g.axis : 1 - g.axis;
+      if ((wantAxis === 0 && cand.dir[1] === 0) || (wantAxis === 1 && cand.dir[0] === 0)) s += 2.2;
+    } else { // spiral
+      const idx = ((g.rotStart + Math.floor(g.step / 2) * g.spin) % 4 + 4) % 4;
+      const want = DIRS[idx];
+      if (cand.dir[0] === want[0] && cand.dir[1] === want[1]) s += 2.2;
+    }
+    return s;
+  }
+
+  // Phase 1: grow to targets, round-robin in rng order
+  let blocked = false;
+  while (unassigned > 0 && !blocked) {
+    const growers = gs.filter(g => g.cells.length < g.target);
+    if (!growers.length) break;
+    rngShuffle(rng, growers);
+    let grew = false;
+    for (const g of growers) {
+      const cands = frontierOf(g);
+      if (!cands.length) continue;
+      let best = cands[0], bs = -Infinity;
+      for (const cand of cands) { const sc = score(g, cand); if (sc > bs) { bs = sc; best = cand; } }
+      reg[best.r][best.c] = g.id;
+      g.cells.push([best.r, best.c]);
+      g.lastDir = best.dir; g.step++;
+      unassigned--; grew = true;
+      if (unassigned === 0) break;
+    }
+    if (!grew) blocked = true;
+  }
+  // Phase 2: absorb leftovers into smallest adjacent region
+  while (unassigned > 0) {
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+      if (reg[r][c] !== -1) continue;
+      let bestG = -1, bestSize = Infinity;
+      for (const [dr, dc] of DIRS) {
+        const nr = r + dr, nc = c + dc;
+        if (nr < 0 || nr >= n || nc < 0 || nc >= n) continue;
+        const g = reg[nr][nc];
+        if (g !== -1 && gs[g].cells.length < bestSize) { bestSize = gs[g].cells.length; bestG = g; }
+      }
+      if (bestG !== -1) { reg[r][c] = bestG; gs[bestG].cells.push([r, c]); unassigned--; }
+    }
+  }
+  return reg;
+}
+function countSolutions(n, reg, cap, collect) {
+  const regLastRow = Array(n).fill(-1);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++)
+    if (r > regLastRow[reg[r][c]]) regLastRow[reg[r][c]] = r;
+  let count = 0;
+  const sol = Array(n).fill(-1);
+  const usedCols = Array(n).fill(false);
+  const usedRegs = Array(n).fill(false);
+  function bt(row) {
+    if (count >= cap) return;
+    if (row === n) { count++; if (collect) collect.push(sol.slice()); return; }
+    for (let g = 0; g < n; g++) if (!usedRegs[g] && regLastRow[g] < row) return; // dead region prune
+    for (let col = 0; col < n; col++) {
+      if (usedCols[col]) continue;
+      const g = reg[row][col];
+      if (usedRegs[g]) continue;
+      if (row > 0 && Math.abs(sol[row - 1] - col) <= 1) continue;
+      sol[row] = col; usedCols[col] = true; usedRegs[g] = true;
+      bt(row + 1);
+      sol[row] = -1; usedCols[col] = false; usedRegs[g] = false;
+    }
+  }
+  bt(0);
+  return count;
+}
+
+function contiguousWithout(n, reg, gId, xr, xc) {
+  let start = null, size = 0;
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    if (reg[r][c] === gId && !(r === xr && c === xc)) { size++; if (!start) start = [r, c]; }
+  }
+  if (size === 0) return false;
+  const seen = new Set([start[0] * n + start[1]]);
+  const q = [start];
+  while (q.length) {
+    const [r, c] = q.pop();
+    for (const [dr, dc] of DIRS) {
+      const nr = r + dr, nc = c + dc, k = nr * n + nc;
+      if (nr < 0 || nr >= n || nc < 0 || nc >= n || seen.has(k)) continue;
+      if (reg[nr][nc] === gId && !(nr === xr && nc === xc)) { seen.add(k); q.push([nr, nc]); }
+    }
+  }
+  return seen.size === size;
+}
+
+function movableNeighbors(n, reg, solution, r, c) {
+  if (solution[r] === c) return null; // never move target-star cells
+  const from = reg[r][c];
+  const neigh = [];
+  for (const [dr, dc] of DIRS) {
+    const nr = r + dr, nc = c + dc;
+    if (nr < 0 || nr >= n || nc < 0 || nc >= n) continue;
+    const g = reg[nr][nc];
+    if (g !== from && neigh.indexOf(g) === -1) neigh.push(g);
+  }
+  if (!neigh.length) return null;
+  if (!contiguousWithout(n, reg, from, r, c)) return null; // donor must stay contiguous
+  return neigh;
+}
+
+// Shrink `pins` randomly-chosen regions down to their star cell (size 1).
+// Pinned stars are fully forced, which collapses the solution count and gives
+// the descent in makeUnique a reachable starting point.
+function shrinkPins(n, reg, stars, rng, pins) {
+  const order = rngShuffle(rng, Array.from({ length: n }, (_, i) => i)).slice(0, pins);
+  for (const g of order) {
+    let guard = 4 * n * n;
+    while (guard-- > 0) {
+      const cells = [];
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (reg[r][c] === g) cells.push([r, c]);
+      if (cells.length <= 1) break;
+      const sr = g, sc = stars[g];
+      cells.sort((a, b) => (Math.abs(b[0] - sr) + Math.abs(b[1] - sc)) - (Math.abs(a[0] - sr) + Math.abs(a[1] - sc)));
+      let stripped = false;
+      for (const [r, c] of cells) {
+        if (r === sr && c === sc) continue;
+        let to = -1;
+        for (const [dr, dc] of DIRS) {
+          const nr = r + dr, nc = c + dc;
+          if (nr < 0 || nr >= n || nc < 0 || nc >= n) continue;
+          if (reg[nr][nc] !== g) { to = reg[nr][nc]; break; }
+        }
+        if (to === -1 || !contiguousWithout(n, reg, g, r, c)) continue;
+        reg[r][c] = to; stripped = true; break;
+      }
+      if (!stripped) break;
+    }
+  }
+  return reg;
+}
+
+// Directed descent to a unique solution: repeatedly reassign the boundary cell
+// that the most alternative solutions route through, keeping a move only when
+// it strictly reduces the solution count; random perturbation on stalls.
+function makeUnique(n, reg, solution, rng, maxRounds) {
+  if (maxRounds === undefined) maxRounds = 150;
+  const CAP = 24;
+  let cnt = countSolutions(n, reg, CAP);
+  for (let t = 0; t < maxRounds; t++) {
+    if (cnt === 1) return reg;
+    const sols = [];
+    countSolutions(n, reg, CAP, sols);
+    const freq = new Map();
+    for (const s of sols) {
+      let same = true;
+      for (let r = 0; r < n; r++) if (s[r] !== solution[r]) { same = false; break; }
+      if (same) continue;
+      for (let r = 0; r < n; r++) if (s[r] !== solution[r]) {
+        const k = r * n + s[r];
+        freq.set(k, (freq.get(k) || 0) + 1);
+      }
+    }
+    const ranked = [...freq.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+    let improved = false;
+    for (const [k] of ranked.slice(0, 12)) {
+      const r = Math.floor(k / n), c = k % n;
+      const neigh = movableNeighbors(n, reg, solution, r, c);
+      if (!neigh) continue;
+      const from = reg[r][c];
+      reg[r][c] = neigh[rngInt(rng, neigh.length)];
+      const nc2 = countSolutions(n, reg, Math.min(cnt, CAP));
+      if (nc2 < cnt) { cnt = nc2; improved = true; break; }
+      reg[r][c] = from; // revert
+    }
+    if (!improved) {
+      const cells = [];
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) cells.push([r, c]);
+      rngShuffle(rng, cells);
+      let perturbed = false;
+      for (const [r, c] of cells) {
+        const neigh = movableNeighbors(n, reg, solution, r, c);
+        if (!neigh) continue;
+        reg[r][c] = neigh[rngInt(rng, neigh.length)];
+        cnt = countSolutions(n, reg, CAP);
+        perturbed = true; break;
+      }
+      if (!perturbed) return null;
+    }
+  }
+  return null;
+}
+function logicSolve(n, reg) {
+  // st: 0 unknown, 1 star, 2 eliminated
+  const st = Array.from({ length: n }, () => Array(n).fill(0));
+  const cells = regionCellsOf(n, reg);
+  let stars = 0, maxTier = 0, t3 = 0;
+
+  function elim(r, c) { if (st[r][c] === 0) { st[r][c] = 2; return true; } return false; }
+  function placeStar(r, c) {
+    st[r][c] = 1; stars++;
+    for (let i = 0; i < n; i++) { if (i !== c) elim(r, i); if (i !== r) elim(i, c); }
+    for (const [rr, cc] of cells[reg[r][c]]) if (rr !== r || cc !== c) elim(rr, cc);
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < n && nc >= 0 && nc < n) elim(nr, nc);
+    }
+  }
+
+  function unitAvail(kind, i) {
+    const out = []; let hasStar = false;
+    if (kind === 'row') { for (let c = 0; c < n; c++) { if (st[i][c] === 1) hasStar = true; else if (st[i][c] === 0) out.push([i, c]); } }
+    else if (kind === 'col') { for (let r = 0; r < n; r++) { if (st[r][i] === 1) hasStar = true; else if (st[r][i] === 0) out.push([r, i]); } }
+    else { for (const [r, c] of cells[i]) { if (st[r][c] === 1) hasStar = true; else if (st[r][c] === 0) out.push([r, c]); } }
+    return { avail: out, hasStar };
+  }
+  const UNITS = [];
+  for (let i = 0; i < n; i++) UNITS.push(['row', i], ['col', i], ['reg', i]);
+
+  while (stars < n) {
+    let progress = false;
+
+    // T1: single candidate in any unit
+    for (const [kind, i] of UNITS) {
+      const u = unitAvail(kind, i);
+      if (u.hasStar) continue;
+      if (u.avail.length === 0) return { solved: false, maxTier, t3 };
+      if (u.avail.length === 1) { placeStar(u.avail[0][0], u.avail[0][1]); progress = true; }
+    }
+    if (progress) { if (maxTier < 1) maxTier = 1; continue; }
+
+    // T2: region confined to one row/col; row/col confined to one region
+    for (let g = 0; g < n && !progress; g++) {
+      const u = unitAvail('reg', g);
+      if (u.hasStar || !u.avail.length) continue;
+      const rows = new Set(u.avail.map(rc => rc[0])), colsS = new Set(u.avail.map(rc => rc[1]));
+      if (rows.size === 1) {
+        const r = u.avail[0][0];
+        for (let c = 0; c < n; c++) if (reg[r][c] !== g && elim(r, c)) progress = true;
+      }
+      if (colsS.size === 1) {
+        const c = u.avail[0][1];
+        for (let r = 0; r < n; r++) if (reg[r][c] !== g && elim(r, c)) progress = true;
+      }
+    }
+    for (let i = 0; i < n && !progress; i++) {
+      for (const kind of ['row', 'col']) {
+        const u = unitAvail(kind, i);
+        if (u.hasStar || !u.avail.length) continue;
+        const regsIn = new Set(u.avail.map(([r, c]) => reg[r][c]));
+        if (regsIn.size === 1) {
+          const g = reg[u.avail[0][0]][u.avail[0][1]];
+          for (const [r, c] of cells[g]) {
+            const inUnit = kind === 'row' ? r === i : c === i;
+            if (!inUnit && elim(r, c)) progress = true;
+          }
+        }
+      }
+    }
+    if (progress) { if (maxTier < 2) maxTier = 2; continue; }
+
+    // T3a: k starless regions confined to k rows (or cols), k=2..3
+    const starless = [];
+    for (let g = 0; g < n; g++) {
+      const u = unitAvail('reg', g);
+      if (!u.hasStar && u.avail.length) starless.push({ g, avail: u.avail });
+    }
+    for (const dim of [0, 1]) {
+      if (progress) break;
+      const conf = starless
+        .map(s => ({ g: s.g, set: new Set(s.avail.map(rc => rc[dim])) }))
+        .filter(s => s.set.size <= 3);
+      const tryCombo = (members) => {
+        const union = new Set();
+        members.forEach(m => m.set.forEach(v => union.add(v)));
+        if (union.size !== members.length) return false;
+        let any = false;
+        const ids = new Set(members.map(m => m.g));
+        for (const line of union) for (let j = 0; j < n; j++) {
+          const r = dim === 0 ? line : j, c = dim === 0 ? j : line;
+          if (!ids.has(reg[r][c]) && elim(r, c)) any = true;
+        }
+        return any;
+      };
+      for (let a = 0; a < conf.length && !progress; a++)
+        for (let b = a + 1; b < conf.length && !progress; b++) {
+          if (tryCombo([conf[a], conf[b]])) { progress = true; break; }
+          for (let c2 = b + 1; c2 < conf.length && !progress; c2++)
+            if (tryCombo([conf[a], conf[b], conf[c2]])) progress = true;
+        }
+    }
+    if (progress) { maxTier = 3; t3++; continue; }
+
+    // T3b: strangle — a star at X would leave some starless unit with no cells
+    let strangled = false;
+    for (let r = 0; r < n && !strangled; r++) for (let c = 0; c < n && !strangled; c++) {
+      if (st[r][c] !== 0) continue;
+      const dead = (rr, cc) =>
+        rr === r || cc === c || reg[rr][cc] === reg[r][c] ||
+        (Math.abs(rr - r) <= 1 && Math.abs(cc - c) <= 1);
+      for (const [kind, i] of UNITS) {
+        const u = unitAvail(kind, i);
+        if (u.hasStar) continue;
+        if (u.avail.some(([rr, cc]) => rr === r && cc === c)) continue; // unit satisfied by X
+        if (u.avail.length && u.avail.every(([rr, cc]) => dead(rr, cc))) {
+          elim(r, c); progress = true; strangled = true; break;
+        }
+      }
+    }
+    if (progress) { maxTier = 3; t3++; continue; }
+
+    return { solved: false, maxTier, t3 };
+  }
+  return { solved: true, maxTier: maxTier || 1, t3 };
+}
+
+const BANDS = {
+  easy:    g => g.maxTier <= 2 && g.t3 === 0,                 // forced cells + simple confinement (8×8)
+  medium:  g => g.maxTier === 3 && g.t3 >= 1 && g.t3 <= 3,    // a few lookahead deductions (8×8)
+  hard:    g => g.maxTier === 3 && g.t3 >= 2 && g.t3 <= 3,    // deduction chains (10×10)
+  extreme: g => g.maxTier === 3 && g.t3 >= 4,                 // deep sustained chains (10×10)
+};
+const TARGET = { easy: [2, 0], medium: [3, 2], hard: [3, 3], extreme: [3, 5] };
+
+function gradeFits(grade, difficulty) {
+  return !!grade && grade.solved === true && BANDS[difficulty](grade);
+}
+function fitScore(grade, difficulty) {
+  if (!grade || !grade.solved) return Infinity;
+  const t = TARGET[difficulty];
+  return Math.abs(grade.maxTier - t[0]) * 10 + Math.abs((grade.t3 || 0) - t[1]);
+}
+function generateCandidate(seedStr, index, difficulty) {
+  const cfg = DIFF[difficulty];
+  if (!cfg) return null;
+  const rng = makeRng(seedStr + '#' + index);
+  const stars = placeStars(cfg.n, rng);
+  if (!stars) return null;
+  let reg = growRegions(cfg.n, stars, rng, cfg);
+  reg = shrinkPins(cfg.n, reg, stars, rng, cfg.pins);
+  reg = makeUnique(cfg.n, reg, stars, rng, cfg.maxRounds);
+  if (!reg) return null;
+  const grade = logicSolve(cfg.n, reg);
+  if (!grade.solved) return null;
+  return { n: cfg.n, regions: reg, solution: stars, difficulty, grade, seed: seedStr, index };
+}
+
+function generatePuzzle(seedStr, difficulty, maxCandidates) {
+  if (maxCandidates === undefined) maxCandidates = DIFF[difficulty] ? DIFF[difficulty].maxCandidates : 40;
+  let best = null, bestScore = Infinity;
+  for (let i = 0; i < maxCandidates; i++) {
+    const cand = generateCandidate(seedStr, i, difficulty);
+    if (!cand) continue;
+    if (gradeFits(cand.grade, difficulty)) return cand;
+    const s = fitScore(cand.grade, difficulty);
+    if (s < bestScore) { bestScore = s; best = cand; }
+  }
+  return best;
+}
+
+function utcDateStr(d) { return (d || new Date()).toISOString().slice(0, 10); }
+function dailySeed(dateStr, kind) { return 'coldshoulder-daily-' + dateStr + '-' + kind; }
+// ==ENGINE-END==
+
+  // ── Grid rendering ────────────────────────────────────────────────────────
+  function setCellSize() {
+    const margin = 32;
+    const cap = N <= 8 ? 48 : N <= 10 ? 42 : 36;
+    // clientWidth (not innerWidth): innerWidth grows when the page overflows, which fed back into the cell size.
+    // The extra 8 covers the grid border (up to 2 x 3px) and sub-pixel rounding.
+    const fit = Math.floor((Math.min(document.documentElement.clientWidth, 620) - margin - 8) / N);
+    document.documentElement.style.setProperty('--cell', Math.max(22, Math.min(cap, fit)) + 'px');
+  }
+  window.addEventListener('resize', () => { if (regions && regions.length) { setCellSize(); updateArt(); } });
+
+  function renderGrid(intro) {
+    const g = document.getElementById('grid');
+    g.style.gridTemplateColumns = `repeat(${N}, var(--cell))`;
+    g.innerHTML = '';
+    setCellSize();
+    const palette = (THEMES[currentTheme] || THEMES[DEFAULT_COAT]).palette;
+
+    for (let r = 0; r < N; r++) {
+      for (let c = 0; c < N; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.r = r; cell.dataset.c = c;
+        cell.style.background = palette[regions[r][c] % palette.length];
+        getRegionBorders(r, c).forEach(b => cell.classList.add(b));
+        if (intro) {
+          cell.classList.add('intro');
+          cell.style.setProperty('--in-delay', ((r + c) * 16) + 'ms');
+          cell.addEventListener('animationend', () => cell.classList.remove('intro'), { once: true });
+        }
+
+        cell.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          if (won || paused) return;
+          isDragging = true;
+          dragMoved = false;
+          dragHistoryPushed = false;
+          dragStartCell = [r, c];
+          dragMarkMode = board[r][c] === 2 ? 'erase' : 'mark';
+        });
+
+        g.appendChild(cell);
+      }
+    }
+    renderBoard();
+    updateUndoRedo();
+  }
+
+  function applyDragCell(r, c) {
+    const v = board[r][c];
+    if (v === 1) return;
+    const willChange =
+      (dragMarkMode === 'mark'  && v === 0) ||
+      (dragMarkMode === 'erase' && v === 2);
+    if (!willChange) return;
+    if (!dragHistoryPushed) { pushHistory(); dragHistoryPushed = true; }
+    board[r][c] = dragMarkMode === 'mark' ? 2 : 0;
+    const idx = r * N + c;
+    const cell = document.getElementById('grid').children[idx];
+    cell.className = 'cell';
+    getRegionBorders(r, c).forEach(b => cell.classList.add(b));
+    if (board[r][c] === 2) cell.classList.add('marker');
+    updateArt();
+  }
+
+  document.addEventListener('pointermove', (e) => {
+    if (!isDragging || won) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if (!el || !el.classList.contains('cell')) return;
+    const cr = parseInt(el.dataset.r), cc = parseInt(el.dataset.c);
+    if (isNaN(cr) || isNaN(cc)) return;
+    if (!dragMoved) {
+      if (dragStartCell[0] === cr && dragStartCell[1] === cc) return;
+      dragMoved = true;
+      applyDragCell(dragStartCell[0], dragStartCell[1]);
+    }
+    applyDragCell(cr, cc);
+  });
+
+  document.addEventListener('pointerup', () => {
+    if (!isDragging) return;
+    if (!dragMoved && dragStartCell) {
+      onCellClick(dragStartCell[0], dragStartCell[1]);
+    } else if (dragHistoryPushed) {
+      renderBoard(); checkWin(); checkUnsolvable(); updateUndoRedo();
+    }
+    isDragging = false; dragMoved = false; dragMarkMode = null;
+    dragStartCell = null; dragHistoryPushed = false;
+  });
+
+  // ── Unsolvable detection ──────────────────────────────────────────────────
+  function checkUnsolvable() {
+    if (won) return;
+    const autoMarked = getAutoMarked();
+    // A cell is available if it's not a star AND not auto-marked by constraints.
+    // Manually-marked cells (board===2) count as available because the player
+    // can cycle them to a star — only auto-marks represent true eliminations.
+    const avail = (r, c) => board[r][c] !== 1 && !autoMarked.has(r * N + c);
+
+    // Only trigger when no genuinely available cell exists anywhere
+    let anyAvail = false;
+    for (let r = 0; r < N && !anyAvail; r++)
+      for (let c = 0; c < N && !anyAvail; c++)
+        if (avail(r, c)) anyAvail = true;
+    if (anyAvail) return;
+
+    // Any region with no star AND no available cell?
+    const regionAvail   = Array(N).fill(false);
+    const regionStarred = Array(N).fill(false);
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      const rg = regions[r][c];
+      if (board[r][c] === 1) regionStarred[rg] = true;
+      if (avail(r, c))       regionAvail[rg]   = true;
+    }
+    for (let rg = 0; rg < N; rg++)
+      if (!regionStarred[rg] && !regionAvail[rg]) { showFailure(); return; }
+
+    // Any row with no star AND no available cell?
+    for (let r = 0; r < N; r++) {
+      let star = false, free = false;
+      for (let c = 0; c < N; c++) {
+        if (board[r][c] === 1) { star = true; break; }
+        if (avail(r, c)) free = true;
+      }
+      if (!star && !free) { showFailure(); return; }
+    }
+
+    // Any column with no star AND no available cell?
+    for (let c = 0; c < N; c++) {
+      let star = false, free = false;
+      for (let r = 0; r < N; r++) {
+        if (board[r][c] === 1) { star = true; break; }
+        if (avail(r, c)) free = true;
+      }
+      if (!star && !free) { showFailure(); return; }
+    }
+  }
+
+  function showFailure() {
+    playSound('fail');
+    openModal('fail');
+  }
+  function failUndo()  { closeModal(); undo(); }
+  function failClear() { closeModal(); clearBoard(); }
+
+  // ── Region border helpers ─────────────────────────────────────────────────
+  function getRegionBorders(r, c) {
+    const cls = [], reg = regions[r][c];
+    if (r===0       || regions[r-1][c] !== reg) cls.push('thick-top');
+    if (c===N-1     || regions[r][c+1] !== reg) cls.push('thick-right');
+    if (r===N-1     || regions[r+1][c] !== reg) cls.push('thick-bottom');
+    if (c===0       || regions[r][c-1] !== reg) cls.push('thick-left');
+    return cls;
+  }
+
+  // ── History ───────────────────────────────────────────────────────────────
+  function snapshotBoard() { return board.map(row => [...row]); }
+  function pushHistory()   { history.push(snapshotBoard()); future = []; updateUndoRedo(); }
+  function updateUndoRedo() {
+    document.getElementById('undo-btn').disabled = won || history.length === 0;
+    document.getElementById('redo-btn').disabled = won || future.length === 0;
+  }
+  function undo() {
+    if (won || !history.length || paused) return;
+    future.push(snapshotBoard()); board = history.pop(); lastPlacedStar = null;
+    playSound('undo'); renderBoard(); checkWin(); updateUndoRedo();
+  }
+  function redo() {
+    if (won || !future.length || paused) return;
+    history.push(snapshotBoard()); board = future.pop(); lastPlacedStar = null;
+    playSound('redo'); renderBoard(); checkWin(); updateUndoRedo();
+  }
+
+  // ── Cell click (cycle) ────────────────────────────────────────────────────
+  function onCellClick(r, c) {
+    if (won || paused) return;
+    pushHistory();
+    const prev = board[r][c];
+    if (prev === 0) { board[r][c] = 2; playSound('mark'); }
+    else if (prev === 2) { board[r][c] = 1; lastPlacedStar = [r, c]; playSound(isConflict(r, c) ? 'clash' : 'place'); }
+    else { board[r][c] = 0; playSound('remove'); }
+    renderBoard(); checkWin(); checkUnsolvable();
+  }
+
+  // ── Auto-mark computation ─────────────────────────────────────────────────
+  function getAutoMarked() {
+    const marked = new Set();
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      if (board[r][c] !== 1) continue;
+      for (let cc = 0; cc < N; cc++) if (cc !== c) marked.add(r * N + cc);
+      for (let rr = 0; rr < N; rr++) if (rr !== r) marked.add(rr * N + c);
+      const reg = regions[r][c];
+      for (let rr = 0; rr < N; rr++) for (let cc = 0; cc < N; cc++)
+        if ((rr !== r || cc !== c) && regions[rr][cc] === reg) marked.add(rr * N + cc);
+      for (const [dr, dc] of [[-1,-1],[-1,1],[1,-1],[1,1]]) {
+        const nr = r+dr, nc = c+dc;
+        if (nr >= 0 && nr < N && nc >= 0 && nc < N) marked.add(nr * N + nc);
+      }
+    }
+    return marked;
+  }
+
+  // ── Board rendering ───────────────────────────────────────────────────────
+  function catSymbol(kind, cellPx) {
+    return '#cat-' + (kind === 'mad' ? 'mad' : 'calm') + (cellPx < 30 ? '-s' : '');
+  }
+  function cellArtHtml(r, c, cellPx) {
+    const v = board[r][c];
+    if (v === 1) return '<svg class="cat" aria-hidden="true"><use href="' + catSymbol(isConflict(r, c) ? 'mad' : 'calm', cellPx) + '"/></svg>' + (won ? '<span class="zzz" aria-hidden="true">z</span>' : '');
+    if (v === 2) return '<svg class="paw" aria-hidden="true"><use href="#paw"/></svg>';
+    return '';
+  }
+  // Auto-marks are decided by renderBoard (class), so art is keyed on the final html + class.
+  function updateArt() {
+    const cellPx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell')) || 48;
+    const kids = document.getElementById('grid').children;
+    const autoMarked = getAutoMarked();
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      const idx = r*N+c, cell = kids[idx];
+      if (!cell) continue;
+      let html = cellArtHtml(r, c, cellPx);
+      if (!html && board[r][c] === 0 && autoMarked.has(idx)) html = '<svg class="paw auto" aria-hidden="true"><use href="#paw"/></svg>';
+      if (cell.dataset.art !== html) { cell.dataset.art = html; cell.innerHTML = html; }
+    }
+  }
+
+  function renderBoard() {
+    const autoMarked = getAutoMarked();
+    const star = lastPlacedStar;
+    lastPlacedStar = null;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      const idx = r*N+c;
+      const cell = document.getElementById('grid').children[idx];
+      const v = board[r][c];
+      const wasAlreadyStar = cell.classList.contains('star');
+      const hadIntro = cell.classList.contains('intro');
+      cell.className = 'cell';
+      if (hadIntro) cell.classList.add('intro');
+      getRegionBorders(r, c).forEach(b => cell.classList.add(b));
+      if (v === 1) {
+        cell.classList.add('star');
+        if (isConflict(r,c)) cell.classList.add('wrong');
+        if (!wasAlreadyStar) {
+          cell.classList.add('star-pop');
+          cell.addEventListener('animationend', () => cell.classList.remove('star-pop'), {once:true});
+        }
+      } else if (v === 2) {
+        cell.classList.add('marker');
+      } else if (autoMarked.has(idx)) {
+        cell.classList.add('auto-marker');
+        const delay = star ? (Math.abs(r-star[0]) + Math.abs(c-star[1])) * 28 : 0;
+        cell.style.setProperty('--mark-delay', delay + 'ms');
+      }
+    }
+    updateArt();
+    updateClashBubble(star);
+    updateProgress();
+  }
+
+  // One bubble over the most recently placed clashing cat; gone when no cat clashes.
+  let bubbleCell = null;
+  function updateClashBubble(placed) {
+    const wrap = document.getElementById('grid-wrap');
+    let el = wrap.querySelector('.clash-bubble');
+    if (bubbleCell && (bubbleCell[0] >= N || bubbleCell[1] >= N || !board[bubbleCell[0]])) bubbleCell = null;
+    if (placed && (placed[0] >= N || placed[1] >= N)) placed = null;
+    if (placed && board[placed[0]][placed[1]] === 1 && isConflict(placed[0], placed[1])) bubbleCell = placed;
+    else if (!(bubbleCell && board[bubbleCell[0]][bubbleCell[1]] === 1 && isConflict(bubbleCell[0], bubbleCell[1]))) {
+      bubbleCell = null;
+      for (let r = 0; r < N && !bubbleCell; r++) for (let c = 0; c < N; c++)
+        if (board[r][c] === 1 && isConflict(r, c)) { bubbleCell = [r, c]; break; }
+    }
+    if (!bubbleCell || won) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'clash-bubble';
+      el.setAttribute('aria-hidden', 'true');
+      el.textContent = 'HSSS!';
+      wrap.appendChild(el);
+    }
+    const cell = document.getElementById('grid').children[bubbleCell[0] * N + bubbleCell[1]];
+    const w = wrap.getBoundingClientRect(), cb = cell.getBoundingClientRect();
+    const bw = el.offsetWidth, bh = el.offsetHeight;
+    const cx = cb.left - w.left + cb.width / 2;
+    const left = Math.max(0, Math.min(w.width - bw, cx - bw / 2));
+    // Side away from the clashing partner(s): partner above/same row -> below the cat, partner below -> above.
+    const [br, bc] = bubbleCell;
+    let upSame = 0, down = 0, partLeft = 0, partRight = 0;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      if ((r === br && c === bc) || board[r][c] !== 1) continue;
+      const clash = r === br || c === bc || regions[r][c] === regions[br][bc] || (Math.abs(r - br) <= 1 && Math.abs(c - bc) <= 1);
+      if (clash) { if (r > br) down++; else upSame++; if (c <= bc) partLeft++; else partRight++; }
+    }
+    const above = cb.top - w.top - bh - 2, below = cb.bottom - w.top + 2;
+    const wantBelow = upSame >= down;
+    let top = wantBelow ? below : above, x = left;
+    if (wantBelow ? top + bh > w.height : top < 0) {
+      // No room on the away side: sit beside the cat, on the side away from the partner.
+      const right = cb.right - w.left + 2, leftSide = cb.left - w.left - bw - 2;
+      const fits = v => v >= 0 && v + bw <= w.width;
+      x = partLeft >= partRight ? (fits(right) ? right : leftSide) : (fits(leftSide) ? leftSide : right);
+      x = Math.max(0, Math.min(w.width - bw, x));
+      top = Math.max(0, Math.min(w.height - bh, cb.top - w.top + cb.height / 2 - bh / 2));
+    }
+    el.style.left = x + 'px';
+    el.style.top = top + 'px';
+  }
+  window.addEventListener('resize', () => { if (bubbleCell) updateClashBubble(null); });
+
+  // ── Conflict & win ────────────────────────────────────────────────────────
+  function isConflict(r, c) {
+    for (let cc = 0; cc < N; cc++) if (cc !== c && board[r][cc] === 1) return true;
+    for (let rr = 0; rr < N; rr++) if (rr !== r && board[rr][c] === 1) return true;
+    const reg = regions[r][c];
+    for (let rr = 0; rr < N; rr++) for (let cc = 0; cc < N; cc++)
+      if ((rr!==r||cc!==c) && board[rr][cc]===1 && regions[rr][cc]===reg) return true;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (dr===0 && dc===0) continue;
+      const nr = r+dr, nc = c+dc;
+      if (nr>=0 && nr<N && nc>=0 && nc<N && board[nr][nc]===1) return true;
+    }
+    return false;
+  }
+
+  function checkWin() {
+    const stars = [];
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (board[r][c]===1) stars.push([r,c]);
+    if (stars.length !== N) return;
+    // Win is detected by constraints alone — any valid arrangement is accepted,
+    // not just the specific solution the generator found.
+    const conflict = stars.some(([r,c]) => isConflict(r,c));
+    if (!conflict) {
+      won = true;
+      updateUndoRedo();
+      updateArt();
+      updateClashBubble(null);
+      clearInterval(timerInt);
+      setPaused(false);
+      document.getElementById('pause-btn').disabled = true;
+      playSound('win');
+      scheduleSleepLoop();
+      confettiBurst();
+      const rec = recordWin();
+      if (dailyKind) {
+        const store = dailyStore();
+        const date = utcDateStr();
+        store[date] = store[date] || {};
+        if (!store[date][dailyKind]) store[date][dailyKind] = { seconds, hints: hintUsed };
+        saveDailyStore(store);
+        showShareButton();
+      }
+      updateProgress();
+      updateStreakChip();
+      stars.forEach(([r,c], i) => {
+        const cell = document.getElementById('grid').children[r*N+c];
+        cell.style.setProperty('--win-delay', (i*90)+'ms');
+        cell.classList.add('correct-flash');
+        cell.addEventListener('animationend', () => {
+          cell.classList.remove('correct-flash');
+          cell.style.removeProperty('--win-delay');
+        }, {once:true});
+      });
+      // Save completion if playing a library puzzle
+      if (currentLibPuzzleId) {
+        const completions = JSON.parse(localStorage.getItem('coldshoulder_completions')||'{}');
+        completions[currentLibPuzzleId] = { seconds, hints: hintUsed, date: new Date().toISOString() };
+        localStorage.setItem('coldshoulder_completions', JSON.stringify(completions));
+      }
+      setTimeout(() => showWinModal(rec), 900);
+    } else {
+      showToast('Hsss. Some cats are too close.', 'err');
+    }
+  }
+
+  function showWinModal(rec) {
+    const winSub = document.getElementById('win-sub');
+    winSub.style.whiteSpace = 'pre-line';
+    winSub.textContent = 'Purr level: maximum.\n' + modeLabel() + ' · ' + N + '×' + N;
+    document.getElementById('win-time').textContent = fmtClock(seconds);
+    document.getElementById('win-best').textContent = rec && rec.best != null ? fmtClock(rec.best) : '—';
+    document.getElementById('win-hints').textContent = hintUsed;
+    const newBest = !!(rec && rec.newBest);
+    document.getElementById('win-newbest').style.display = newBest ? '' : 'none';
+    const streakEl = document.getElementById('win-streak');
+    const streakDays = dailyKind ? computeStreak(dailyStore()).current : 0;
+    streakEl.textContent = streakDays > 0 ? '🐾 ' + streakDays + '-day nap streak' : '';
+    streakEl.style.display = streakDays > 0 ? '' : 'none';
+    document.getElementById('win-tags').style.display = (newBest || streakDays > 0) ? '' : 'none';
+    document.getElementById('win-share-btn').style.display = dailyKind ? '' : 'none';
+    openModal('win');
+  }
+
+  // ── Hint ──────────────────────────────────────────────────────────────────
+  function giveHint() {
+    if (won || paused || !solution) return;
+
+    // Step 1: flash any conflicting stars (constraint-based, not solution-based)
+    const wrongCells = [];
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++)
+      if (board[r][c] === 1 && isConflict(r, c)) wrongCells.push([r, c]);
+
+    if (wrongCells.length > 0) {
+      playSound('hint'); hintUsed++;
+      wrongCells.forEach(([r, c]) => {
+        const cell = document.getElementById('grid').children[r*N+c];
+        cell.classList.add('hint-flash');
+        cell.addEventListener('animationend', () => cell.classList.remove('hint-flash'), {once:true});
+      });
+      showToast(wrongCells.length > 1 ? 'Grandma Cat: these cats are in the wrong box.' : 'Grandma Cat: this cat is in the wrong box.');
+      updateUndoRedo(); return;
+    }
+
+    // Step 2: mark one auto-marked (guaranteed non-star) empty cell
+    const autoMarked = getAutoMarked();
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      if (board[r][c] === 0 && autoMarked.has(r*N+c)) {
+        pushHistory(); board[r][c] = 2; hintUsed++;
+        playSound('hint'); renderBoard();
+        const cell = document.getElementById('grid').children[r*N+c];
+        cell.classList.add('hint-flash');
+        cell.addEventListener('animationend', () => cell.classList.remove('hint-flash'), {once:true});
+        showToast("Grandma Cat: no cat fits there.");
+        updateUndoRedo(); return;
+      }
+    }
+
+    // Step 3: fallback — mark a cell that contradicts the stored solution
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      if (board[r][c] === 0 && solution[r] !== c) {
+        pushHistory(); board[r][c] = 2; hintUsed++;
+        playSound('hint'); renderBoard();
+        const cell = document.getElementById('grid').children[r*N+c];
+        cell.classList.add('hint-flash');
+        cell.addEventListener('animationend', () => cell.classList.remove('hint-flash'), {once:true});
+        showToast("Grandma Cat: no cat fits there.");
+        updateUndoRedo(); return;
+      }
+    }
+  }
+
+  // ── Clear board ───────────────────────────────────────────────────────────
+  function clearBoard() {
+    if (paused) return;
+    stopSleepLoop();
+    pushHistory();
+    won = false;
+    document.getElementById('pause-btn').disabled = false;
+    board = Array.from({length:N}, () => Array(N).fill(0));
+    bubbleCell = null;
+    lastPlacedStar = null;
+    renderBoard();
+    updateUndoRedo();
+  }
+
+  // ── Library ───────────────────────────────────────────────────────────────
+  function loadLibraryJSON() {
+    try {
+      const raw = document.getElementById('lib-json').value.trim();
+      const data = JSON.parse(raw);
+      if (!Array.isArray(data.puzzles)) throw new Error('Expected {"puzzles":[...]}');
+      libraryPuzzles = data.puzzles;
+      refreshLibList();
+      showToast('Loaded ' + libraryPuzzles.length + ' board' + (libraryPuzzles.length !== 1 ? 's' : '') + '.');
+    } catch (e) {
+      showToast('Invalid JSON: ' + e.message, 'err');
+    }
+  }
+
+  function refreshLibList() {
+    const list = document.getElementById('lib-list');
+    if (!list) return;
+    const completions = JSON.parse(localStorage.getItem('coldshoulder_completions') || '{}');
+    list.innerHTML = '';
+    if (!libraryPuzzles.length) {
+      list.innerHTML = '<div class="panel-sub">No boards loaded yet.</div>';
+      return;
+    }
+    libraryPuzzles.forEach(p => {
+      const comp = completions[p.id];
+      const row = document.createElement('div');
+      row.className = 'row-card clickable';
+      const timeStr = comp ? fmtClock(comp.seconds) : '';
+      row.innerHTML = `
+        <span class="row-label">#${p.id}</span>
+        <span class="row-meta">${p.n}×${p.n}</span>
+        <span class="badge badge-${p.difficulty}">${DIFF_LABEL[p.difficulty] || p.difficulty}</span>
+        ${comp ? `<span class="badge badge-done">✓ ${timeStr}</span>` : '<span class="row-play">Play ›</span>'}
+      `;
+      row.addEventListener('click', () => loadLibraryPuzzle(p));
+      list.appendChild(row);
+    });
+  }
+
+  function loadLibraryPuzzle(p) {
+    if (!p || !p.regions || !p.solution) { showToast('That board is not valid.', 'err'); return; }
+    stopSleepLoop();
+    genId++; // cancel any in-flight generation
+    clearInterval(timerInt);
+    hideGenOverlay();
+    currentLibPuzzleId = p.id;
+    N = p.n;
+    regions = p.regions;
+    solution = p.solution;
+    diff = p.difficulty;
+    won = false; seconds = 0; hintUsed = 0;
+    history = []; future = [];
+    board = Array.from({length:N}, () => Array(N).fill(0));
+    bubbleCell = null;
+    dailyKind = null;
+    setPaused(false);
+    hideShareButton();
+    updateSeg();
+    updateModeChip();
+    renderGrid(true);
+    updateTimer();
+    document.getElementById('pause-btn').disabled = false;
+    timerInt = setInterval(() => { if (!won && !paused && !document.hidden) { seconds++; updateTimer(); } }, 1000);
+    closeModal();
+  }
+
+  // ── Daily mode ────────────────────────────────────────────────────────────
+  function dailyStore() { return JSON.parse(localStorage.getItem('coldshoulder_daily') || '{}'); }
+  function saveDailyStore(s) { localStorage.setItem('coldshoulder_daily', JSON.stringify(s)); }
+  function fmtTime(s) { return fmtClock(s); }
+
+  const DIFF_LABEL = { easy: 'Kitten', medium: 'Tabby', hard: 'Alley Cat', extreme: 'Lion' };
+  const DAILY_KINDS = [
+    { kind: 'featured', label: 'Daily Nap', difficulty: 'medium' },
+    { kind: 'easy',     label: DIFF_LABEL.easy,      difficulty: 'easy' },
+    { kind: 'medium',   label: DIFF_LABEL.medium,    difficulty: 'medium' },
+    { kind: 'hard',     label: DIFF_LABEL.hard,      difficulty: 'hard' },
+    { kind: 'extreme',  label: DIFF_LABEL.extreme,   difficulty: 'extreme' },
+  ];
+
+  function refreshDailyPanel() {
+    const date = utcDateStr();
+    const store = dailyStore();
+    const today = store[date] || {};
+    document.getElementById('daily-date').textContent =
+      date + ' (UTC) · every cat gets the same boxes today';
+    const st = computeStreak(store);
+    document.getElementById('daily-streak').textContent = st.current
+      ? (st.current + '-day nap streak · best ' + st.best)
+      : 'Finish Daily Nap to start a nap streak';
+    const list = document.getElementById('daily-list');
+    list.innerHTML = '';
+    DAILY_KINDS.forEach(({ kind, label, difficulty }) => {
+      const row = document.createElement('div');
+      row.className = 'row-card clickable';
+      const done = today[kind];
+      const nSize = DIFF[difficulty].n;
+      row.innerHTML =
+        '<span class="row-label">' + label + '</span>' +
+        '<span class="row-meta">' + DIFF_LABEL[difficulty] + ' · ' + nSize + '×' + nSize + '</span>' +
+        (done ? '<span class="badge badge-done">✓ ' + fmtTime(done.seconds) + '</span>'
+              : '<span class="row-play">Play ›</span>');
+      row.addEventListener('click', () => playDaily(kind, difficulty, date));
+      list.appendChild(row);
+    });
+  }
+
+  function playDaily(kind, difficulty, date) {
+    stopSleepLoop();
+    closeModal();
+    const start = () => {
+      diff = difficulty;
+      updateSeg();
+      newGame(dailySeed(date, kind), kind);
+    };
+    if (gameDirty()) {
+      confirmDialog('Play Daily Nap?', 'The cats will scatter. Progress on this board is lost.', 'Play', start);
+    } else start();
+  }
+
+  function nextUtcDate(d) { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + 1); return t.toISOString().slice(0, 10); }
+  function prevUtcDate(d) { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() - 1); return t.toISOString().slice(0, 10); }
+
+  function computeStreak(store) {
+    let best = 0, run = 0, prev = null;
+    const dates = Object.keys(store).filter(d => store[d].featured).sort();
+    for (const d of dates) {
+      run = (prev && nextUtcDate(prev) === d) ? run + 1 : 1;
+      if (run > best) best = run;
+      prev = d;
+    }
+    const today = utcDateStr();
+    const current = (prev === today || prev === prevUtcDate(today)) ? run : 0;
+    return { current, best };
+  }
+
+  function updateStreakChip() {
+    const st = computeStreak(dailyStore());
+    const chip = document.getElementById('streak-chip');
+    if (st.current > 0) { chip.textContent = '🐾 ' + st.current; chip.style.display = 'inline-block'; }
+    else chip.style.display = 'none';
+  }
+
+  // ── Share ─────────────────────────────────────────────────────────────────
+  function showShareButton() { document.getElementById('share-btn').hidden = false; }
+  function hideShareButton() { document.getElementById('share-btn').hidden = true; }
+
+  function buildShareText() {
+    const st = computeStreak(dailyStore());
+    return '🐱 Cold Shoulder · ' + modeLabel() +
+      ' · ' + fmtTime(seconds) +
+      (hintUsed ? ' · ' + hintUsed + (hintUsed > 1 ? ' hints' : ' hint') : '') +
+      (st.current > 1 ? ' · 🐾 ' + st.current : '') +
+      '\nSeed: ' + currentSeed +
+      '\nhttps://mostprovikki.github.io/cold-shoulder/';
+  }
+
+  function shareResult() {
+    const txt = buildShareText();
+    const done = () => showToast('Copied. Go show off.', 'win');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(done, done);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = txt; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      ta.remove(); done();
+    }
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  function statsStore() { return JSON.parse(localStorage.getItem('coldshoulder_stats') || '{"perDiff":{}}'); }
+  function recordWin() {
+    const s = statsStore();
+    const d = s.perDiff[diff] || { won: 0, best: null };
+    d.won++;
+    const newBest = d.best === null || seconds < d.best;
+    if (newBest) d.best = seconds;
+    s.perDiff[diff] = d;
+    localStorage.setItem('coldshoulder_stats', JSON.stringify(s));
+    return { newBest: newBest && d.won > 1, best: d.best };
+  }
+
+  function refreshStatsPanel() {
+    const s = statsStore();
+    const st = computeStreak(dailyStore());
+    let totalWon = 0;
+    ['easy','medium','hard','extreme'].forEach(d => { totalWon += (s.perDiff[d] || {won:0}).won; });
+    const tiles = document.getElementById('stats-tiles');
+    tiles.innerHTML =
+      '<div class="stat-tile"><div class="st-val">' + totalWon + '</div><div class="st-lbl">Naps</div></div>' +
+      '<div class="stat-tile"><div class="st-val">' + st.current + '</div><div class="st-lbl">Nap streak · best ' + st.best + '</div></div>';
+    const list = document.getElementById('stats-list');
+    list.innerHTML = '';
+    ['easy','medium','hard','extreme'].forEach(d => {
+      const e = s.perDiff[d];
+      const row = document.createElement('div');
+      row.className = 'row-card';
+      row.innerHTML =
+        '<span class="row-label">' + DIFF_LABEL[d] + '</span>' +
+        '<span class="row-meta">' + (e ? (e.won + ' won · best ' + fmtTime(e.best)) : '—') + '</span>';
+      list.appendChild(row);
+    });
+  }
+
+  // ── Confetti ──────────────────────────────────────────────────────────────
+  const REDUCED_MOTION = window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function confettiBurst() {
+    if (REDUCED_MOTION) return;
+    const cv = document.getElementById('confetti');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    cv.width = window.innerWidth; cv.height = window.innerHeight;
+    const colors = (THEMES[currentTheme] || THEMES[DEFAULT_COAT]).palette;
+    const parts = Array.from({ length: 130 }, () => ({
+      x: cv.width / 2 + (Math.random() - 0.5) * 160,
+      y: cv.height * 0.45,
+      vx: (Math.random() - 0.5) * 11,
+      vy: -Math.random() * 12 - 4,
+      s: 4 + Math.random() * 5,
+      rot: Math.random() * Math.PI,
+      vr: (Math.random() - 0.5) * 0.3,
+      col: colors[Math.floor(Math.random() * colors.length)],
+    }));
+    const t0 = performance.now();
+    (function frame(t) {
+      const dt = Math.min((t - t0) / 1400, 1);
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      for (const p of parts) {
+        p.x += p.vx; p.y += p.vy; p.vy += 0.35; p.rot += p.vr;
+        ctx.save(); ctx.translate(p.x, p.y);
+        ctx.globalAlpha = 1 - dt;
+        ctx.fillStyle = p.col;
+        ctx.rotate(p.rot);
+        const k = p.s / 40 * 2.4;
+        ctx.scale(k, k); ctx.translate(-20, -20);
+        ctx.beginPath();
+        ctx.ellipse(20, 26.5, 8.5, 7.2, 0, 0, Math.PI * 2);
+        for (const [x, y] of [[9.5, 16.5], [16.3, 10.4], [23.7, 10.4], [30.5, 16.5]]) { ctx.moveTo(x + 3.8, y); ctx.arc(x, y, 3.8, 0, Math.PI * 2); }
+        ctx.fill();
+        ctx.restore();
+      }
+      if (dt < 1) requestAnimationFrame(frame);
+      else ctx.clearRect(0, 0, cv.width, cv.height);
+    })(t0);
+  }
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'textarea' || tag === 'input') return;
+    const k = e.key.toLowerCase();
+    if (k === 'escape') { if (activeModal) { closeModal(); e.preventDefault(); } return; }
+    if (activeModal) return;
+    switch (k) {
+      case 'z': case 'u': undo(); break;
+      case 'y': redo(); break;
+      case 'h': giveHint(); break;
+      case 'n': requestNewGame(); break;
+      case 'p': togglePause(); break;
+      case '1': setDiffReq('easy'); break;
+      case '2': setDiffReq('medium'); break;
+      case '3': setDiffReq('hard'); break;
+      case '4': setDiffReq('extreme'); break;
+    }
+  });
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+  applyTheme(currentTheme);
+  updateStreakChip();
+  updateMuteButton();
+  updateSeg();
+  if (!localStorage.getItem('coldshoulder_seen_help')) {
+    localStorage.setItem('coldshoulder_seen_help', '1');
+    openModal('help');
+  }
+  setDiff('easy');
+  </script>
+</body>
+</html>
